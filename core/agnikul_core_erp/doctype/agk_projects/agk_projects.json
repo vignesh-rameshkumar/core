@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "autoname": "field:project_name",
+ "creation": "2025-01-08 15:00:24.427047",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "project_name",
+  "primary_approver",
+  "status",
+  "rig_details",
+  "column_break_9dxt6",
+  "project_code",
+  "secondary_approver",
+  "has_rig",
+  "has_facility",
+  "facility_details",
+  "section_break_yjjal",
+  "column_break_kbise",
+  "project_members"
+ ],
+ "fields": [
+  {
+   "fieldname": "project_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Project Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "project_code",
+   "fieldtype": "Data",
+   "label": "Project Code"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nInactive\nCompleted",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "primary_approver",
+   "fieldtype": "Link",
+   "label": "Primary Approver",
+   "options": "User"
+  },
+  {
+   "fieldname": "secondary_approver",
+   "fieldtype": "Link",
+   "label": "Secondary Approver",
+   "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "has_rig",
+   "fieldtype": "Check",
+   "label": "Has Rig"
+  },
+  {
+   "default": "0",
+   "fieldname": "has_facility",
+   "fieldtype": "Check",
+   "label": "Has Facility"
+  },
+  {
+   "fieldname": "rig_details",
+   "fieldtype": "JSON",
+   "label": "Rig Details"
+  },
+  {
+   "fieldname": "facility_details",
+   "fieldtype": "JSON",
+   "label": "Facility Details"
+  },
+  {
+   "fieldname": "project_members",
+   "fieldtype": "JSON",
+   "label": "Project Members"
+  },
+  {
+   "fieldname": "column_break_9dxt6",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_kbise",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_yjjal",
+   "fieldtype": "Section Break"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-01-08 15:37:50.935350",
+ "modified_by": "Administrator",
+ "module": "Agnikul Core ERP",
+ "name": "AGK_Projects",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

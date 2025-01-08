@@ -1,0 +1,74 @@
+{
+ "actions": [],
+ "autoname": "field:department_name",
+ "creation": "2025-01-08 15:02:23.269124",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "department_name",
+  "department_code",
+  "primary_approver",
+  "secondary_approver"
+ ],
+ "fields": [
+  {
+   "fieldname": "department_name",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Department Name",
+   "options": "Department",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "department_code",
+   "fieldtype": "Data",
+   "label": "Department Code"
+  },
+  {
+   "fieldname": "primary_approver",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Primary Approver",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "secondary_approver",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Secondary Approver",
+   "options": "User",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-01-08 15:48:38.992024",
+ "modified_by": "Administrator",
+ "module": "Agnikul Core ERP",
+ "name": "AGK_Departments",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "department_name",
+ "track_changes": 1
+}
