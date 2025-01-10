@@ -1,6 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
+ "autoname": "field:facility_name",
  "creation": "2025-01-08 15:09:10.900033",
  "default_view": "List",
  "doctype": "DocType",
@@ -17,7 +18,8 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Facility Name",
-   "reqd": 1
+   "reqd": 1,
+   "unique": 1
   },
   {
    "fieldname": "facility_code",
@@ -38,10 +40,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-08 15:09:10.900033",
+ "modified": "2025-01-10 16:33:58.455332",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Facilities",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
@@ -52,7 +55,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "System Manager",
+   "role": "Employee",
    "share": 1,
    "write": 1
   }
