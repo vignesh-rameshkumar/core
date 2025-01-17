@@ -6,6 +6,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "is_product",
   "category",
   "code",
   "sub_categories"
@@ -21,10 +22,9 @@
   },
   {
    "fieldname": "sub_categories",
-   "fieldtype": "JSON",
-   "in_list_view": 1,
+   "fieldtype": "Table",
    "label": "Sub Categories",
-   "reqd": 1
+   "options": "MIS Subcategories"
   },
   {
    "fieldname": "category",
@@ -33,11 +33,18 @@
    "label": "Category",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_product",
+   "fieldtype": "Check",
+   "label": "Is Product",
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-10 16:34:12.514300",
+ "modified": "2025-01-17 15:50:14.271933",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_MIS",

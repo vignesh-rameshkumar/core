@@ -10,11 +10,11 @@
   "project_name",
   "primary_approver",
   "status",
+  "has_rig",
   "rig_details",
   "column_break_9dxt6",
   "project_code",
   "secondary_approver",
-  "has_rig",
   "has_facility",
   "facility_details",
   "section_break_yjjal",
@@ -33,7 +33,8 @@
   {
    "fieldname": "project_code",
    "fieldtype": "Data",
-   "label": "Project Code"
+   "label": "Project Code",
+   "reqd": 1
   },
   {
    "default": "Active",
@@ -71,18 +72,21 @@
   },
   {
    "fieldname": "rig_details",
-   "fieldtype": "JSON",
-   "label": "Rig Details"
+   "fieldtype": "Table",
+   "label": "Rig Details",
+   "options": "Rig"
   },
   {
    "fieldname": "facility_details",
-   "fieldtype": "JSON",
-   "label": "Facility Details"
+   "fieldtype": "Table",
+   "label": "Facility Details",
+   "options": "Facility"
   },
   {
    "fieldname": "project_members",
-   "fieldtype": "JSON",
-   "label": "Project Members"
+   "fieldtype": "Table",
+   "label": "Project Members",
+   "options": "Members"
   },
   {
    "fieldname": "column_break_9dxt6",
@@ -99,7 +103,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-10 16:34:42.915210",
+ "modified": "2025-01-17 15:43:58.078979",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Projects",
