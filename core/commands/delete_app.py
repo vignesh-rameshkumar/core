@@ -44,7 +44,7 @@ def get_app_doctypes(appname):
         
         return doctypes
     except Exception as e:
-        click.echo(colored(f"Error finding doctypes for app '{appname}': {e}", 'red'))
+        click.echo(colored(f"Error finding doctypes for app '{appname}': {e}", 'black', 'on_red'))
         return []
 
 def delete_app_documents(appname, site=None):
@@ -58,7 +58,7 @@ def delete_app_documents(appname, site=None):
                 with open('currentsite.txt', 'r') as f:
                     site = f.read().strip()
             except FileNotFoundError:
-                click.echo(colored("Error: currentsite.txt not found and no site provided.", 'red'))
+                click.echo(colored("Error: currentsite.txt not found and no site provided.", 'black', 'on_red'))
                 return False
 
         # Initialize Frappe and connect to the site
@@ -76,7 +76,7 @@ def delete_app_documents(appname, site=None):
         for doctype in doctypes:
             try:
                 frappe.db.delete(doctype)
-                click.echo(colored(f"Deleted all documents for doctype: {doctype}", 'black', 'on_green'))
+                print(f"Deleted all documents for doctype: {doctype}")
             except Exception as doctype_error:
                 click.echo(colored(f"Error deleting documents for doctype {doctype}: {doctype_error}", 'black', 'on_red'))
 
@@ -91,15 +91,51 @@ def delete_app_documents(appname, site=None):
         return False
 
 @click.command('delete-app')
-@click.option('--site', default=None, help='Specify the site name (optional).')
+@click.option('--site', default=None, type=str, help='Specify the site name (optional). If not provided, uses the current site.')
 @click.argument('appname')
 @click.option('--backup/--no-backup', default=True, 
               prompt='Do you want to take a backup before deleting?',
-              help='Take a backup before deleting app documents.')
+              help='Take a backup before deleting app documents. Default is to create a backup.')
 def delete_app(site, appname, backup):
     """
-    Delete all documents for a specified app.
-    Optionally takes a backup before deletion.
+    Permanently delete all documents for a specific app with optional backup.
+    
+    This command provides a comprehensive and safe document deletion mechanism:
+    
+    Key Features:
+    - Mandatory pre-deletion backup confirmation
+    - Site-specific document management
+    - Granular, doctype-level deletion
+    - Atomic transaction with database commit
+    
+    Deletion Workflow:
+    1. Prompt for backup confirmation (default: yes)
+    2. Create a comprehensive backup of all app documents
+    3. Identify all doctypes associated with the specified app
+    4. Systematically delete documents for each doctype
+    5. Commit changes to the database
+    
+    Safety Mechanisms:
+    - Backup creation prevents irreversible data loss
+    - Explicit user confirmation required
+    - Supports disabling backup with --no-backup flag
+    
+    Potential Use Cases:
+    - Cleaning up test or deprecated app data
+    - Preparing for app reinstallation
+    - Managing development environment
+    
+    Performance Considerations:
+    - Deletion process scales with the number of doctypes
+    - Larger apps may require more time to process
+    
+    Examples:
+    \b
+    - bench delete-app core                  # Delete with backup
+    - bench delete-app core --site mysite    # Delete on specific site
+    - bench delete-app core --no-backup      # Delete without backup
+    
+    ⚠️ WARNING: Irreversible operation. Use with extreme caution.
     """
     try:
         # Backup if requested

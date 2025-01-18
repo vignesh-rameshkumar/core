@@ -88,12 +88,35 @@ def restore_documents(docs, doctype, verbose=False):
     return restored_count
 
 @click.command('restore-app')
-@click.option('--site', default=None, help='Specify the site name (optional).')
+@click.option('--site', default=None, type=str, help='Specify the site name (optional). If not provided, uses the current site.')
 @click.option('--verbose', is_flag=True, help='Enable verbose logging for detailed troubleshooting.')
-@click.argument('appname')
-@click.argument('backup_path', default=None, required=False)
+@click.argument('appname', type=str)
+@click.argument('backup_path', default=None, required=False, type=str)
 def restore_app(site, verbose, appname, backup_path=None):
-   
+    """
+    Restore documents for a specific app from a backup.
+    
+    This command restores all documents for the specified app from a backup.
+    It supports:
+    - Automatic selection of the most recent backup if no path is specified
+    - Optional verbose logging for detailed troubleshooting
+    - Site-specific restoration
+    
+    Restoration process:
+    1. Locates the backup directory or specified backup path
+    2. Clears existing documents for each doctype in the app
+    3. Restores documents from the backup JSON files
+    4. Commits changes to the database
+    
+    Backup location searched: ./backup/<appname>/
+    
+    Examples:
+    \b
+    - bench restore-app core
+    - bench restore-app core --site mysite
+    - bench restore-app core --verbose
+    - bench restore-app core /path/to/specific/backup
+    """
     # Determine the site
     if not site:
         try:
