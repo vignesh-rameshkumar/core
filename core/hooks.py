@@ -199,3 +199,9 @@ app_license = "MIT"
 # auth_hooks = [
 #	"core.auth.validate"
 # ]
+fixtures = [
+    {
+        "dt": "Custom DocPerm",
+        "filters": [["parent", "in", ["AGK_MIS", "AGK_Projects","AGK_Departments","AGK_Facilities","AGK_Rigs"]]]
+    }
+]

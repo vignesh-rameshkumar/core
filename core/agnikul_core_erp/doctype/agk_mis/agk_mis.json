@@ -44,7 +44,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-17 15:50:14.271933",
+ "modified": "2025-01-18 13:08:55.483508",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_MIS",
@@ -58,7 +58,8 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Employee",
+   "role": "System Manager",
+   "select": 1,
    "share": 1,
    "write": 1
   }
