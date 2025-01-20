@@ -14,7 +14,7 @@
   "rig_details",
   "column_break_9dxt6",
   "project_code",
-  "secondary_approver",
+  "proxy_approver",
   "has_facility",
   "facility_details",
   "section_break_yjjal",
@@ -50,12 +50,6 @@
    "fieldname": "primary_approver",
    "fieldtype": "Link",
    "label": "Primary Approver",
-   "options": "User"
-  },
-  {
-   "fieldname": "secondary_approver",
-   "fieldtype": "Link",
-   "label": "Secondary Approver",
    "options": "User"
   },
   {
@@ -99,11 +93,17 @@
   {
    "fieldname": "section_break_yjjal",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "proxy_approver",
+   "fieldtype": "Link",
+   "label": "Proxy Approver",
+   "options": "User"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-17 15:43:58.078979",
+ "modified": "2025-01-20 18:08:42.074231",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Projects",

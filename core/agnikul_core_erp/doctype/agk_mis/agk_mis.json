@@ -8,18 +8,10 @@
  "field_order": [
   "is_product",
   "category",
-  "code",
+  "mis_code",
   "sub_categories"
  ],
  "fields": [
-  {
-   "fieldname": "code",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Code",
-   "reqd": 1,
-   "search_index": 1
-  },
   {
    "fieldname": "sub_categories",
    "fieldtype": "Table",
@@ -40,11 +32,19 @@
    "fieldtype": "Check",
    "label": "Is Product",
    "search_index": 1
+  },
+  {
+   "fieldname": "mis_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "MIS Code",
+   "reqd": 1,
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-18 13:08:55.483508",
+ "modified": "2025-01-20 18:07:18.427468",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_MIS",

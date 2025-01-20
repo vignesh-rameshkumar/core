@@ -10,7 +10,7 @@
   "department_name",
   "department_code",
   "primary_approver",
-  "secondary_approver"
+  "proxy_approver"
  ],
  "fields": [
   {
@@ -36,17 +36,17 @@
    "reqd": 1
   },
   {
-   "fieldname": "secondary_approver",
+   "fieldname": "proxy_approver",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Secondary Approver",
+   "label": "Proxy Approver",
    "options": "User",
    "reqd": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-10 16:34:29.541279",
+ "modified": "2025-01-20 18:09:11.093351",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Departments",
