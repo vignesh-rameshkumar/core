@@ -10,7 +10,10 @@ app_license = "MIT"
 
 doc_events = {
     "AGK_Projects": {
-        "before_save": "core.api.role.pl"
+        "before_save": "core.api.pl_role.assign"
+    },
+    "AGK_Departments": {
+        "before_save": "core.api.dl_role.assign"
     }
 }
 

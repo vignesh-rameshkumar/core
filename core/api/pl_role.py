@@ -2,7 +2,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-def pl(doc, method):
+def assign(doc, method):
     """
     Manage Project Lead and Proxy Project Lead roles dynamically based on project status and email fields.
     
