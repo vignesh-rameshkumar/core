@@ -8,8 +8,8 @@
  "engine": "InnoDB",
  "field_order": [
   "module_name",
-  "primary_functional_lead",
-  "proxy_functional_lead"
+  "primary_functional_head",
+  "proxy_functional_head"
  ],
  "fields": [
   {
@@ -19,23 +19,23 @@
    "unique": 1
   },
   {
-   "fieldname": "primary_functional_lead",
+   "fieldname": "primary_functional_head",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Primary Functional Lead",
+   "label": "Primary Functional Head",
    "options": "User",
    "reqd": 1
   },
   {
-   "fieldname": "proxy_functional_lead",
+   "fieldname": "proxy_functional_head",
    "fieldtype": "Link",
-   "label": "Proxy Functional Lead",
+   "label": "Proxy Functional Head",
    "options": "User"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-20 18:25:59.990907",
+ "modified": "2025-01-20 18:45:40.029280",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_ERP_Products",

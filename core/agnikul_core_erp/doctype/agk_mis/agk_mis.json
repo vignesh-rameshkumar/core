@@ -8,7 +8,7 @@
  "field_order": [
   "is_product",
   "category",
-  "mis_code",
+  "mis_indicator",
   "sub_categories"
  ],
  "fields": [
@@ -34,17 +34,17 @@
    "search_index": 1
   },
   {
-   "fieldname": "mis_code",
+   "fieldname": "mis_indicator",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "MIS Code",
+   "label": "MIS Indicator",
    "reqd": 1,
    "search_index": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-20 18:07:18.427468",
+ "modified": "2025-01-21 14:29:40.689559",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_MIS",
