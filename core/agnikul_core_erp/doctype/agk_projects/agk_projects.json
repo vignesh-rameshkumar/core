@@ -9,16 +9,20 @@
  "field_order": [
   "project_name",
   "primary_approver",
-  "status",
-  "has_rig",
-  "rig_details",
-  "column_break_9dxt6",
-  "project_code",
+  "indicator",
+  "column_break_5jev8",
   "proxy_approver",
-  "has_facility",
-  "facility_details",
+  "status",
+  "section_break_ngk81",
+  "column_break_rdj2d",
+  "is_general",
+  "column_break_hkyep",
+  "is_rig",
+  "column_break_xq1rw",
+  "is_product",
   "section_break_yjjal",
   "column_break_kbise",
+  "details",
   "project_members"
  ],
  "fields": [
@@ -29,12 +33,6 @@
    "label": "Project Name",
    "reqd": 1,
    "unique": 1
-  },
-  {
-   "fieldname": "project_code",
-   "fieldtype": "Data",
-   "label": "Project Code",
-   "reqd": 1
   },
   {
    "default": "Active",
@@ -50,41 +48,14 @@
    "fieldname": "primary_approver",
    "fieldtype": "Link",
    "label": "Primary Approver",
-   "options": "User"
-  },
-  {
-   "default": "0",
-   "fieldname": "has_rig",
-   "fieldtype": "Check",
-   "label": "Has Rig"
-  },
-  {
-   "default": "0",
-   "fieldname": "has_facility",
-   "fieldtype": "Check",
-   "label": "Has Facility"
-  },
-  {
-   "fieldname": "rig_details",
-   "fieldtype": "Table",
-   "label": "Rig Details",
-   "options": "Rig"
-  },
-  {
-   "fieldname": "facility_details",
-   "fieldtype": "Table",
-   "label": "Facility Details",
-   "options": "Facility"
+   "options": "User",
+   "reqd": 1
   },
   {
    "fieldname": "project_members",
    "fieldtype": "Table",
    "label": "Project Members",
    "options": "Members"
-  },
-  {
-   "fieldname": "column_break_9dxt6",
-   "fieldtype": "Column Break"
   },
   {
    "fieldname": "column_break_kbise",
@@ -99,11 +70,61 @@
    "fieldtype": "Link",
    "label": "Proxy Approver",
    "options": "User"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_rig",
+   "fieldtype": "Check",
+   "label": "Is Rig"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_product",
+   "fieldtype": "Check",
+   "label": "Is Product"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_general",
+   "fieldtype": "Check",
+   "label": "Is General"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Table",
+   "label": "Details",
+   "options": "Project Detail"
+  },
+  {
+   "fieldname": "indicator",
+   "fieldtype": "Data",
+   "label": "Indicator",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_ngk81",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_rdj2d",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_hkyep",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_xq1rw",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "column_break_5jev8",
+   "fieldtype": "Column Break"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-20 18:08:42.074231",
+ "modified": "2025-01-24 16:30:21.931396",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Projects",
@@ -126,5 +147,6 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
+ "title_field": "project_name",
  "track_changes": 1
 }

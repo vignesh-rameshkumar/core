@@ -9,13 +9,15 @@
  "field_order": [
   "module_name",
   "primary_functional_head",
-  "proxy_functional_head"
+  "proxy_functional_head",
+  "admin"
  ],
  "fields": [
   {
    "fieldname": "module_name",
    "fieldtype": "Data",
    "label": "Module Name",
+   "reqd": 1,
    "unique": 1
   },
   {
@@ -31,11 +33,17 @@
    "fieldtype": "Link",
    "label": "Proxy Functional Head",
    "options": "User"
+  },
+  {
+   "fieldname": "admin",
+   "fieldtype": "Link",
+   "label": "Admin",
+   "options": "User"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-20 18:45:40.029280",
+ "modified": "2025-01-24 15:08:48.932893",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_ERP_Products",
