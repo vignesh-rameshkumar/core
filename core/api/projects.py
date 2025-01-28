@@ -1,7 +1,33 @@
-from frappe import _  # Import for translations
+from frappe import _, throw  # Import for translations and error handling
 from frappe.utils.response import json_handler  # Import for JSON responses
 import frappe  # Main Frappe framework import
 import json  # For JSON handling
+
+@frappe.whitelist()
+def approvers(code):
+    try:
+        # Fetch the parent document where the code exists in the child table
+        project = frappe.get_all(
+            "AGK_Projects",
+            filters={"status": "Active"},
+            fields=["name", "primary_approver", "proxy_approver"],
+            or_filters=[
+                ["Project Detail", "code", "=", code]
+            ]
+        )
+
+        # If no project is found, raise an error
+        if not project:
+            throw(_("No project found with the provided code."))
+
+        # Return the approvers
+        return {
+            "primary_approver": project[0].get("primary_approver"),
+            "proxy_approver": project[0].get("proxy_approver")
+        }
+    except Exception as e:
+        # Handle exceptions and return an error response
+        throw(_("An error occurred while fetching approvers: {0}").format(str(e)))
 
 @frappe.whitelist()
 def list(limit=20, start=0):
