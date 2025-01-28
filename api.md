@@ -37,8 +37,8 @@ None
 ### Sample Response
 ```json
 {
-    "primary_approver": "John Doe",
-    "proxy_approver": "Jane Smith"
+    "primary_approver": "johndoe@agnikul.in",
+    "proxy_approver": "janesmith@agnikul.in"
 }
 ```
 
@@ -56,12 +56,12 @@ None
 ```json
 [
     {
-        "name": "Facility A",
-        "location": "New York"
+        "facility_name": "Facility A",
+        "facility_code": "F0001"
     },
     {
-        "name": "Facility B",
-        "location": "San Francisco"
+        "facility_name": "Facility B",
+        "facility_code": "F0002"
     }
 ]
 ```
