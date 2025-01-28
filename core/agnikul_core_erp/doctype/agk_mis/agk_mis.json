@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "autoname": "field:category",
  "creation": "2025-01-08 15:23:40.531559",
  "default_view": "List",
  "doctype": "DocType",
@@ -24,7 +25,7 @@
    "in_list_view": 1,
    "label": "Category",
    "reqd": 1,
-   "search_index": 1
+   "unique": 1
   },
   {
    "default": "0",
@@ -44,10 +45,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-21 14:29:40.689559",
+ "modified": "2025-01-28 10:49:41.078167",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_MIS",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

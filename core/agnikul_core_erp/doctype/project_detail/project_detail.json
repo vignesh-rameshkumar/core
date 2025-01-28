@@ -2,7 +2,6 @@
  "actions": [],
  "creation": "2025-01-24 15:39:55.751663",
  "doctype": "DocType",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "name1",
@@ -13,19 +12,21 @@
    "fieldname": "name1",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Name"
+   "label": "Name",
+   "unique": 1
   },
   {
    "fieldname": "code",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Code"
+   "label": "Code",
+   "unique": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2025-01-24 16:28:43.728115",
+ "modified": "2025-01-24 18:08:27.723455",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "Project Detail",

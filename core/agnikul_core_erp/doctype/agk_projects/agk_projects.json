@@ -93,7 +93,8 @@
    "fieldname": "details",
    "fieldtype": "Table",
    "label": "Details",
-   "options": "Project Detail"
+   "options": "Project Detail",
+   "read_only": 1
   },
   {
    "fieldname": "indicator",
@@ -124,7 +125,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-24 16:30:21.931396",
+ "modified": "2025-01-27 12:32:47.343500",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Projects",
