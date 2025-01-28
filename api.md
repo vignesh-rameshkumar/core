@@ -37,8 +37,8 @@ None
 ### Sample Response
 ```json
 {
-    "primary_approver": "johndoe@agnikul.in",
-    "proxy_approver": "janesmith@agnikul.in"
+    "primary_approver": "arjunan@agnikul.in",
+    "proxy_approver": "adithi@agnikul.in"
 }
 ```
 
@@ -56,11 +56,11 @@ None
 ```json
 [
     {
-        "facility_name": "Facility A",
+        "facility_name": "Thaiyur",
         "facility_code": "F0001"
     },
     {
-        "facility_name": "Facility B",
+        "facility_name": "Research Park",
         "facility_code": "F0002"
     }
 ]
@@ -124,6 +124,20 @@ None
     ],
     "has_more": true,
     "next_start": 20
+}
+```
+
+### Endpoint
+`/api/method/core.api.projects.approvers`
+
+### Parameters
+- `code` (string): The code of the Project.
+
+### Sample Response
+```json
+{
+    "primary_approver": "arjunan@agnikul.in",
+    "proxy_approver": "adithi@agnikul.in"
 }
 ```
 
