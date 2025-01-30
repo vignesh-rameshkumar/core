@@ -4,7 +4,7 @@ from frappe.model.document import Document
 
 def assign(doc, method):
     """
-    Manage Department Head and Proxy Department Head roles dynamically based on department email fields.
+    Manage Department Lead and Proxy Department Lead roles dynamically based on department email fields.
     
     Rules:
     1. Roles are managed based on primary_approver and proxy_approver fields.
@@ -61,17 +61,17 @@ def assign(doc, method):
         if old_email and old_email != email and not is_user_in_other_departments(old_email):
             remove_role(old_email, role)
 
-    # Manage Department Head Role
+    # Manage Department Lead Role
     manage_department_role(
         safe_get_email(doc, 'primary_approver'), 
-        'Department Head', 
+        'Department Lead', 
         safe_get_email(old_doc, 'primary_approver') if old_doc else None
     )
 
-    # Manage Proxy Department Head Role
+    # Manage Proxy Department Lead Role
     manage_department_role(
         safe_get_email(doc, 'proxy_approver'), 
-        'Proxy Department Head', 
+        'Proxy Department Lead', 
         safe_get_email(old_doc, 'proxy_approver') if old_doc else None
     )
 

@@ -7,6 +7,8 @@ app_description = "Core ERP System for Agnikul Cosmos"
 app_email = "automationbot@agnikul.in"
 app_license = "MIT"
 
+after_install = "core.api.install.create_roles"
+
 
 doc_events = {
     "AGK_Projects": {
