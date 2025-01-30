@@ -8,23 +8,7 @@ import sys
 import traceback
 import importlib.util
 
-try:
-    from termcolor import colored
-except ImportError as e:
-    print(f"Import Error for termcolor: {e}")
-    print("Python Path:", sys.path)
-    traceback.print_exc()
-    
-    # Attempt to import using full path
-    try:
-        termcolor_path = '/home/vignesh/.local/lib/python3.10/site-packages/termcolor/__init__.py'
-        spec = importlib.util.spec_from_file_location("termcolor", termcolor_path)
-        termcolor = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(termcolor)
-        colored = termcolor.colored
-    except Exception as fallback_error:
-        print(f"Fallback import failed: {fallback_error}")
-        colored = lambda text, color=None, attrs=None: text  # Fallback dummy function
+from termcolor import colored
 
 def get_all_doctypes(appname):
     
