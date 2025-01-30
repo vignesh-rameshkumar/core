@@ -16,12 +16,9 @@ doc_events = {
     },
     "AGK_Departments": {
         "before_save": "core.api.dl_role.assign"
+    },
+    "AGK_ERP_Products": {
+        "before_insert": "core.api.products.create",
+        "before_save": "core.api.products.assign"
     }
 }
-
-fixtures = [
-    {
-        "dt": "Custom DocPerm",
-        "filters": [["parent", "in", ["AGK_MIS", "AGK_Projects","AGK_Departments","AGK_Facilities","AGK_Rigs"]]]
-    }
-]
