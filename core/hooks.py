@@ -20,5 +20,9 @@ doc_events = {
     "AGK_ERP_Products": {
         "before_insert": "core.api.products.create",
         "before_save": "core.api.products.assign"
+    },
+    "AGK_Facilities": {
+        "before_insert": "core.api.facility.security",
+        "validate": "core.api.facility.validate_status"
     }
 }
