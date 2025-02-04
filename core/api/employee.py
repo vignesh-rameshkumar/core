@@ -79,6 +79,24 @@ def before_validate(doc, method):
             if projects:
                 frappe.throw(f"Cannot change Employee status. User is a proxy approver in Projects: {', '.join([p['name'] for p in projects])}")
 
+def delete_pushnotify_user(doc, method):
+    """
+    Deletes the PushNotify User document if the Employee status is not Active.
+    """
+    if doc.status != "Active" and doc.user_id:
+        try:
+            # Search for the PushNotify User document by name matching user_id
+            pushnotify_user = frappe.get_doc("PushNotify User", doc.user_id)
+            if pushnotify_user:
+                pushnotify_user.delete()
+                # frappe.msgprint(f"PushNotify User {doc.user_id} has been deleted.")
+        except frappe.DoesNotExistError:
+            # Document not found, no action needed
+            pass
+        except Exception as e:
+            frappe.log_error(f"Error deleting PushNotify User for Employee {doc.name}: {str(e)}")
+            frappe.throw(f"Could not delete PushNotify User: {str(e)}")
+
 def validate_user_status(doc, method):
     """
     This function is triggered during validation of the Employee document.
