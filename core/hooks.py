@@ -24,5 +24,9 @@ doc_events = {
     "AGK_Facilities": {
         "before_insert": "core.api.facility.security",
         "validate": "core.api.facility.validate_status"
+    },
+    "Employee": {
+        "before_validate": "core.api.employee.before_validate",
+        "validate": "core.api.employee.validate_user_status"
     }
 }

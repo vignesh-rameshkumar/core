@@ -40,13 +40,12 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Proxy Approver",
-   "options": "User",
-   "reqd": 1
+   "options": "User"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-01-20 18:09:11.093351",
+ "modified": "2025-02-04 14:55:38.299550",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_Departments",
