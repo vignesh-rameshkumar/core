@@ -61,6 +61,59 @@ bench delete-app core --site mysite
 bench delete-app core --no-backup
 ```
 
+#### Backup Doctype Command
+
+```bash
+bench backup-doctype [OPTIONS] DOCTYPE
+```
+
+Backup a specific Doctype within a given date range.
+
+**Options:**
+- `--site`: Specify the site name (optional)
+- `--from`: Start date in YYYY-MM-DD format (optional)
+- `--to`: End date in YYYY-MM-DD format (optional)
+
+**Example:**
+```bash
+bench backup-doctype User --from 2025-01-01 --to 2025-01-31
+bench backup-doctype User --from 2025-01-01 --to 2025-01-31 --site mysite
+```
+
+#### Restore Doctype Command
+
+```bash
+bench restore-doctype [OPTIONS] DOCTYPE [BACKUP_FILE]
+```
+
+Restore the latest backup or a specific backup file of a Doctype.
+
+**Options:**
+- `--site`: Specify the site name (optional)
+- `BACKUP_FILE`: Optional name of the backup file to restore (if not provided, restores the latest backup)
+
+**Example:**
+```bash
+bench restore-doctype User
+bench restore-doctype User --site mysite
+bench restore-doctype User User-20250217-160622.json
+```
+
+```bash
+bench restore-doctype [OPTIONS] DOCTYPE
+```
+
+Restore the latest backup of a specific Doctype.
+
+**Options:**
+- `--site`: Specify the site name (optional)
+
+**Example:**
+```bash
+bench restore-doctype User
+bench restore-doctype User --site mysite
+```
+
 ### Accessing Command Help Manual
 
 You can access detailed help documentation for each custom command directly in the terminal using the following methods:
@@ -85,6 +138,16 @@ bench restore-app --help
 3. Delete App Command
 ```bash
 bench delete-app --help
+```
+
+4. Backup Doctype Command
+```bash
+bench backup-doctype --help
+```
+
+5. Restore Doctype Command
+```bash
+bench restore-doctype --help
 ```
 
 Each help command provides:
