@@ -17,11 +17,13 @@ None
 [
     {
         "department_name": "Human Resource",
-        "department_code": "D0001"
+        "department_code": "D0001",
+        "primary_approver": "adithi@agnikul.in"
     },
     {
         "department_name": "IT",
-        "department_code": "D0002"
+        "department_code": "D0002",
+        "primary_approver": "arjunan@agnikul.in"
     }
 ]
 ```
@@ -115,11 +117,13 @@ None
     "details": [
         {
             "name1": "Project A",
-            "code": "P0001"
+            "code": "P0001",
+            "approver": "adithi@agnikul.in"
         },
         {
             "name1": "Project B",
-            "code": "P0002"
+            "code": "P0002",
+            "approver": "arjunan@agnikul.in"
         }
     ],
     "has_more": true,

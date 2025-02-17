@@ -40,18 +40,28 @@ def list(limit=20, start=0):
         active_projects = frappe.get_all(
             "AGK_Projects",
             filters={"status": "Active"},
-            fields=["name"]
+            fields=["name", "primary_approver"]
         )
         active_project_names = [project["name"] for project in active_projects]
 
         # Fetch child details only for active parent projects with limit and offset
-        details = frappe.get_all(
-            "Project Detail",
-            filters={"parent": ["in", active_project_names]},
-            fields=["name1", "code"],
-            start=start,
-            limit=limit
-        )
+        details = [
+            {
+                "name1": detail["name1"],
+                "code": detail["code"],
+                "approver": next(
+                    (project["primary_approver"] for project in active_projects if project["name"] == detail["parent"]),
+                    None
+                )
+            }
+            for detail in frappe.get_all(
+                "Project Detail",
+                filters={"parent": ["in", active_project_names]},
+                fields=["name1", "code", "parent"],
+                start=start,
+                limit=limit
+            )
+        ]
 
         # Check if there are more records
         total_count = frappe.db.count("Project Detail", {"parent": ["in", active_project_names]})

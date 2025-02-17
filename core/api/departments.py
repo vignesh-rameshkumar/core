@@ -8,7 +8,7 @@ def list():
         # Query the AGK_Rigs doctype
         dept = frappe.get_all(
             "AGK_Departments",
-            fields=["department_name", "department_code"]
+            fields=["department_name", "department_code", "primary_approver"]
         )
         # Return the result as JSON
         return (dept)
