@@ -98,6 +98,13 @@ def backup_doctype(site, doctype, start_date, end_date):
             query = f"SELECT * FROM `tab{doctype}`"
         documents = frappe.db.sql(query, as_dict=True)
 
+        # Fetch child table data
+        child_tables = frappe.get_all("DocField", filters={"parent": doctype, "fieldtype": "Table"}, fields=["options"])
+        for child_table in child_tables:
+            for doc in documents:
+                child_query = f"SELECT * FROM `tab{child_table.options}` WHERE parent = '{doc['name']}'"
+                doc[child_table.options] = frappe.db.sql(child_query, as_dict=True)
+
         # Save documents to JSON file
         with open(backup_file, 'w') as f:
             json.dump(documents, f, indent=4, default=json_datetime_handler)
