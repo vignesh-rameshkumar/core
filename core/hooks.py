@@ -28,6 +28,6 @@ doc_events = {
     "Employee": {
         "before_validate": "core.api.employee.before_validate",
         "validate": "core.api.employee.validate_user_status",
-        "on_update": "core.api.employee.delete_pushnotify_user"
+        "before_save": "core.api.employee.before_save"
     }
 }

@@ -1,4 +1,5 @@
 import frappe
+from frappe.utils import nowdate
 
 def before_validate(doc, method):
     """
@@ -79,7 +80,33 @@ def before_validate(doc, method):
             if projects:
                 frappe.throw(f"Cannot change Employee status. User is a proxy approver in Projects: {', '.join([p['name'] for p in projects])}")
 
-def delete_pushnotify_user(doc, method):
+def before_save(doc, method):
+    
+    if doc.company_email:
+        try:
+            # Check if a User document already exists
+            user_exists = frappe.db.exists("User", {"email": doc.company_email})
+            if not user_exists:
+                # Create a new User document
+                user = frappe.get_doc({
+                    "doctype": "User",
+                    "email": doc.company_email,
+                    "full_name": doc.employee_name,
+                    "first_name": doc.first_name,
+                    "user_image": doc.image,
+                    "birth_date": doc.date_of_birth,
+                    "enabled": 1,
+                    "send_welcome_email": 1
+                })
+                user.insert(ignore_permissions=True)
+                frappe.msgprint(f"User {doc.company_email} has been created.")
+                
+                # Update the Employee's user_id field
+                doc.user_id = doc.company_email
+        except Exception as e:
+            frappe.log_error(f"Error creating User for Employee {doc.name}: {str(e)}")
+            frappe.throw(f"Could not create User: {str(e)}")
+
     """
     Deletes the PushNotify User document if the Employee status is not Active.
     """
