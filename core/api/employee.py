@@ -96,7 +96,8 @@ def before_save(doc, method):
                     "user_image": doc.image,
                     "birth_date": doc.date_of_birth,
                     "enabled": 1,
-                    "send_welcome_email": 1
+                    "send_welcome_email": 0,
+                    "new_password": "Agn1kul!"
                 })
                 user.insert(ignore_permissions=True)
                 frappe.msgprint(f"User {doc.company_email} has been created.")
