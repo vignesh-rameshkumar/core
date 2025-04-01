@@ -145,3 +145,54 @@ def rate_limit(time_window: int = 5):
                 
         return wrapper
     return decorator
+
+@frappe.whitelist()
+def approver(id):
+    project_approver = frappe.db.sql("""
+        SELECT pd.name1
+        FROM `tabAGK_Projects` p
+        JOIN `tabProject Detail` pd ON pd.parent = p.name
+        WHERE p.status = 'Active'
+        AND (p.primary_approver = %s OR p.proxy_approver = %s)
+    """, (id, id), as_dict=True)
+
+    department_approver = frappe.db.sql("""
+        SELECT department_name
+        FROM `tabAGK_Departments`
+        WHERE primary_approver = %s OR proxy_approver = %s
+    """, (id, id), as_dict=True)
+
+    result = {
+        "projects": [d.name1 for d in project_approver],
+        "departments": [d.department_name for d in department_approver]
+    }
+
+    return result
+
+@frappe.whitelist()
+@paginate()
+def get_employees(dept=None, query=None, start=0, limit=20):
+    
+    filters = {"status": "Active"}
+    
+    if dept:
+        filters["department"] = dept
+
+    fields = ["employee_name", "user_id", "department"]
+    
+    if query:
+        or_filters = [
+            ["employee_name", "like", f"%{query}%"],
+            ["user_id", "like", f"%{query}%"]
+        ]
+    else:
+        or_filters = None
+    
+    employees = frappe.get_list(
+        "Employee",
+        fields=fields,
+        filters=filters,
+        or_filters=or_filters
+    )
+    
+    return employees
