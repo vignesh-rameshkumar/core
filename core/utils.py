@@ -192,7 +192,8 @@ def get_employees(dept=None, query=None, start=0, limit=20):
         "Employee",
         fields=fields,
         filters=filters,
-        or_filters=or_filters
+        or_filters=or_filters,
+        ignore_permissions=True
     )
     
     return employees
