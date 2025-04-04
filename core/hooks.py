@@ -31,3 +31,5 @@ doc_events = {
         "before_save": "core.api.employee.before_save"
     }
 }
+
+website_route_rules = [{'from_route': '/desk/<path:app_path>', 'to_route': 'desk'},]

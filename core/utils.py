@@ -4,6 +4,7 @@ from typing import Callable, Dict, List, Any, Optional, Union
 import hashlib
 import json
 import time
+from datetime import date
 
 def paginate():
     """
@@ -145,3 +146,127 @@ def rate_limit(time_window: int = 5):
                 
         return wrapper
     return decorator
+
+@frappe.whitelist()
+def approver(id):
+    project_approver = frappe.db.sql("""
+        SELECT pd.name1
+        FROM `tabAGK_Projects` p
+        JOIN `tabProject Detail` pd ON pd.parent = p.name
+        WHERE p.status = 'Active'
+        AND (p.primary_approver = %s OR p.proxy_approver = %s)
+    """, (id, id), as_dict=True)
+
+    department_approver = frappe.db.sql("""
+        SELECT department_name
+        FROM `tabAGK_Departments`
+        WHERE primary_approver = %s OR proxy_approver = %s
+    """, (id, id), as_dict=True)
+
+    result = {
+        "projects": [d.name1 for d in project_approver],
+        "departments": [d.department_name for d in department_approver]
+    }
+
+    return result
+
+@frappe.whitelist()
+@paginate()
+def get_employees(dept=None, query=None, start=0, limit=20):
+    
+    filters = {"status": "Active"}
+    
+    if dept:
+        filters["department"] = dept
+
+    fields = ["employee_name", "user_id", "department"]
+    
+    if query:
+        or_filters = [
+            ["employee_name", "like", f"%{query}%"],
+            ["user_id", "like", f"%{query}%"]
+        ]
+    else:
+        or_filters = None
+    
+    employees = frappe.get_list(
+        "Employee",
+        fields=fields,
+        filters=filters,
+        or_filters=or_filters,
+        ignore_permissions=True
+    )
+    
+    return employees
+
+
+@frappe.whitelist()
+def get_leads(pro, app):
+    approvers = {
+        "pro_approvers": [],
+        "app_approvers": []
+    }
+
+    # Fetch pro approvers
+    pro_approvers = validate_pro_or_app("pro", pro)
+    approvers["pro_approvers"] = pro_approvers
+
+    # Fetch app approvers
+    app_approvers = validate_pro_or_app("app", app)
+    approvers["app_approvers"] = app_approvers
+
+    return approvers
+
+def validate_pro_or_app(category, value):
+    primary, proxy = None, None
+
+    if category == "pro":
+        # Step 1: Check in AGK_Departments
+        department = frappe.get_all("AGK_Departments", 
+                                    filters={"department_name": value}, 
+                                    fields=["primary_approver", "proxy_approver"], 
+                                    limit=1)
+        if department:
+            primary, proxy = department[0]["primary_approver"], department[0]["proxy_approver"]
+        else:
+            # Step 2: Check in Project Detail child table
+            project_detail = frappe.get_all("Project Detail", 
+                                            filters={"name1": value}, 
+                                            fields=["parent"], 
+                                            limit=1)
+            if project_detail:
+                project = frappe.get_all("AGK_Projects", 
+                                         filters={"name": project_detail[0]["parent"]}, 
+                                         fields=["primary_approver", "proxy_approver"], 
+                                         limit=1)
+                if project:
+                    primary, proxy = project[0]["primary_approver"], project[0]["proxy_approver"]
+    
+    elif category == "app":
+        # Step 1: Check in AGK_ERP_Products
+        product = frappe.get_all("AGK_ERP_Products", 
+                                 filters={"module_name": value}, 
+                                 fields=["primary_fl", "proxy_fl"], 
+                                 limit=1)
+        if product:
+            primary, proxy = product[0]["primary_fl"], product[0]["proxy_fl"]
+
+    return filter_approvers(primary, proxy)
+
+def filter_approvers(primary, proxy):
+    if not primary:
+        return []
+
+    today = date.today().strftime("%Y-%m-%d")
+    leave_statuses = {"Casual Leave", "Sick Leave", "Maternity Leave", "Paternity Leave"}
+
+    # Fetch attendance status in one query
+    attendance = frappe.get_all("Attendance_Records", 
+                                filters={"employee_email": primary, "date": today}, 
+                                fields=["status"], 
+                                limit=1)
+
+    if attendance and attendance[0]["status"] in leave_statuses:
+        return [primary, proxy] if proxy else [primary]
+
+    return [primary]
