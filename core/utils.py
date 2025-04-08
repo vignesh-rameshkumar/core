@@ -7,14 +7,7 @@ import time
 from datetime import date
 
 def paginate():
-    """
-    An improved decorator to add pagination functionality to Frappe API endpoints.
-    
-    Features:
-    - Automatically handles limit + 1 logic
-    - Transparently manages pagination for different query methods
-    - Supports various Frappe query methods
-    """
+   
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Dict[str, Any]:
@@ -149,26 +142,49 @@ def rate_limit(time_window: int = 5):
 
 @frappe.whitelist()
 def approver(id):
-    project_approver = frappe.db.sql("""
-        SELECT pd.name1
-        FROM `tabAGK_Projects` p
-        JOIN `tabProject Detail` pd ON pd.parent = p.name
-        WHERE p.status = 'Active'
-        AND (p.primary_approver = %s OR p.proxy_approver = %s)
-    """, (id, id), as_dict=True)
+    # Projects: combine primary + proxy
+    projects = frappe.db.sql("""
+        (
+            SELECT pd.name1 AS name, 'primary' AS role
+            FROM `tabAGK_Projects` p
+            JOIN `tabProject Detail` pd ON pd.parent = p.name
+            WHERE p.status = 'Active' AND p.primary_approver = %(id)s
+        )
+        UNION ALL
+        (
+            SELECT pd.name1 AS name, 'proxy' AS role
+            FROM `tabAGK_Projects` p
+            JOIN `tabProject Detail` pd ON pd.parent = p.name
+            WHERE p.status = 'Active' AND p.proxy_approver = %(id)s
+        )
+    """, {"id": id}, as_dict=True)
 
-    department_approver = frappe.db.sql("""
-        SELECT department_name
-        FROM `tabAGK_Departments`
-        WHERE primary_approver = %s OR proxy_approver = %s
-    """, (id, id), as_dict=True)
+    # Departments: combine primary + proxy
+    departments = frappe.db.sql("""
+        (
+            SELECT department_name AS name, 'primary' AS role
+            FROM `tabAGK_Departments`
+            WHERE primary_approver = %(id)s
+        )
+        UNION ALL
+        (
+            SELECT department_name AS name, 'proxy' AS role
+            FROM `tabAGK_Departments`
+            WHERE proxy_approver = %(id)s
+        )
+    """, {"id": id}, as_dict=True)
 
-    result = {
-        "projects": [d.name1 for d in project_approver],
-        "departments": [d.department_name for d in department_approver]
+    # Group by role for response formatting
+    def group_by_role(data):
+        grouped = {"primary": [], "proxy": []}
+        for row in data:
+            grouped[row.role].append(row.name)
+        return grouped
+
+    return {
+        "projects": group_by_role(projects),
+        "departments": group_by_role(departments)
     }
-
-    return result
 
 @frappe.whitelist()
 @paginate()
@@ -201,7 +217,7 @@ def get_employees(dept=None, query=None, start=0, limit=20):
 
 
 @frappe.whitelist()
-def get_leads(pro, app):
+def get_leads(pro=None, app=None):
     approvers = {
         "pro_approvers": [],
         "app_approvers": []
@@ -258,7 +274,7 @@ def filter_approvers(primary, proxy):
         return []
 
     today = date.today().strftime("%Y-%m-%d")
-    leave_statuses = {"Casual Leave", "Sick Leave", "Maternity Leave", "Paternity Leave"}
+    leave_statuses = {"Casual Leave", "Sick Leave", "Maternity Leave", "Paternity Leave", "Festival Leave"}
 
     # Fetch attendance status in one query
     attendance = frappe.get_all("Attendance_Records", 
@@ -270,3 +286,31 @@ def filter_approvers(primary, proxy):
         return [primary, proxy] if proxy else [primary]
 
     return [primary]
+
+@frappe.whitelist()
+def user_roles():
+    user = frappe.session.user
+    roles = frappe.get_roles(user)
+    dept = frappe.db.get_value('AGK_ERP_Products', {'name': 'Payroll'}, ['func_dept'])
+    user_dept = frappe.db.get_value('Employee',{'status': 'Active','company_email':user},['department'])
+    ea_user = frappe.db.sql("""
+        SELECT u.name
+        FROM `tabUser` u
+        JOIN `tabHas Role` hr ON hr.parent = u.name
+        WHERE u.email = %s AND hr.role = %s
+    """, (user, "Executive Assistant"))
+
+    if ea_user:
+        ea_user = ea_user[0][0]
+    else:
+        ea_user = None
+
+    if ea_user != None:
+        roles.append("Executive Assistant")
+    if dept == user_dept:
+        roles.append("HR_User")
+    if 'All' in roles:
+        roles.remove('All')
+    if 'Guest' in roles:
+        roles.remove('Guest')
+    return roles
