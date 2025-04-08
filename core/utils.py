@@ -7,7 +7,6 @@ import time
 from datetime import date
 
 def paginate():
-<<<<<<< HEAD
     """
     An improved decorator to add pagination functionality to Frappe API endpoints.
 
@@ -16,9 +15,7 @@ def paginate():
     - Transparently manages pagination for different query methods
     - Supports various Frappe query methods
     """
-=======
 
->>>>>>> ead6f5ea479c925b7407f1e808a9f9fe62b0ba0b
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Dict[str, Any]:
