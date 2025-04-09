@@ -12,7 +12,6 @@ def get_roles(module=None):
     # Get all roles of the current session user
     user_roles = frappe.get_roles(user)
 
-    # If module is provided, return role flags
     if module:
         module = module.strip().lower()
         normalized_roles = [role.lower() for role in user_roles]

@@ -1,14 +1,14 @@
 {
-  "name": "desk",
+  "name": "erp-desk",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --base=/assets/core/desk/ && yarn copy-html-entry",
+    "build": "vite build --base=/assets/core/erp-desk/ && yarn copy-html-entry",
     "lint": "eslint .",
     "preview": "vite preview",
-    "copy-html-entry": "cp ../core/public/desk/index.html ../core/www/desk.html"
+    "copy-html-entry": "cp ../core/public/erp-desk/index.html ../core/www/erp-desk.html"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",

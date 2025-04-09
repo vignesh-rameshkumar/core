@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../core/public/desk",
+    outDir: "../core/public/erp-desk",
     emptyOutDir: true,
     target: "es2015",
   },
