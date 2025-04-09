@@ -286,31 +286,3 @@ def filter_approvers(primary, proxy):
         return [primary, proxy] if proxy else [primary]
 
     return [primary]
-
-@frappe.whitelist()
-def user_roles():
-    user = frappe.session.user
-    roles = frappe.get_roles(user)
-    dept = frappe.db.get_value('AGK_ERP_Products', {'name': 'Payroll'}, ['func_dept'])
-    user_dept = frappe.db.get_value('Employee',{'status': 'Active','company_email':user},['department'])
-    ea_user = frappe.db.sql("""
-        SELECT u.name
-        FROM `tabUser` u
-        JOIN `tabHas Role` hr ON hr.parent = u.name
-        WHERE u.email = %s AND hr.role = %s
-    """, (user, "Executive Assistant"))
-
-    if ea_user:
-        ea_user = ea_user[0][0]
-    else:
-        ea_user = None
-
-    if ea_user != None:
-        roles.append("Executive Assistant")
-    if dept == user_dept:
-        roles.append("HR_User")
-    if 'All' in roles:
-        roles.remove('All')
-    if 'Guest' in roles:
-        roles.remove('Guest')
-    return roles

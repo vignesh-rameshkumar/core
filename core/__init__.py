@@ -3,30 +3,70 @@ __version__ = '1.0.5'
 
 import frappe
 from frappe import _
+import json
 
 @frappe.whitelist()
-def get_roles(module):
-    if not module:
-        frappe.throw(_("Module is required"))
-
-    # Normalize module name for role matching (e.g., Fleet → fleet)
-    module = module.strip().lower()
+def get_roles(module=None):
+    user = frappe.session.user
 
     # Get all roles of the current session user
-    user_roles = frappe.get_roles(frappe.session.user)
-    normalized_roles = [role.lower() for role in user_roles]
+    user_roles = frappe.get_roles(user)
 
-    # Prepare the response structure
-    role_flags = {
-        "employee": int("employee" in normalized_roles),
-        "project_lead": int("project lead" in normalized_roles),
-        "proxy_project_lead": int("proxy project lead" in normalized_roles),
-        "department_lead": int("department lead" in normalized_roles),
-        "proxy_department_lead": int("proxy department lead" in normalized_roles),
-        f"{module}_fl": int(f"{module} fl" in normalized_roles),
-        f"{module}_pfl": int(f"{module} pfl" in normalized_roles),
-        f"{module}_admin": int(f"{module} admin" in normalized_roles),
-        "super_admin": int("super admin" in normalized_roles),
+    # If module is provided, return role flags
+    if module:
+        module = module.strip().lower()
+        normalized_roles = [role.lower() for role in user_roles]
+
+        def has_role(role_name):
+            return int(role_name in normalized_roles)
+
+        role_flags = {
+            "employee": has_role("employee"),
+            "project_lead": has_role("project lead"),
+            "proxy_project_lead": has_role("proxy project lead"),
+            "department_lead": has_role("department lead"),
+            "proxy_department_lead": has_role("proxy department lead"),
+            f"{module}_fl": has_role(f"{module} fl"),
+            f"{module}_pfl": has_role(f"{module} pfl"),
+            f"{module}_admin": has_role(f"{module} admin"),
+            "super_admin": has_role("super admin"),
+        }
+        return role_flags
+
+    # Fetch user and employee info in fewer calls
+    employee_info = frappe.db.get_value(
+        "Employee", {"user_id": user}, ["employee_name", "department"], as_dict=True
+    ) or {}
+
+    user_info = frappe.db.get_value(
+        "User", user, ["desk_theme", "user_image"], as_dict=True
+    ) or {}
+
+    return {
+        "roles": user_roles,
+        "employee_name": employee_info.get("employee_name"),
+        "department": employee_info.get("department"),
+        "desk_theme": user_info.get("desk_theme"),
+        "user_image": user_info.get("user_image"),
     }
 
-    return role_flags
+@frappe.whitelist()
+def get_desk_data():
+    cache_key = "desk_settings_cache"
+    cached_data = frappe.cache().get_value(cache_key)
+
+    if cached_data:
+        return json.loads(cached_data)
+
+    # Fetch Desk Settings and cache it
+    config_doc = frappe.get_single("Desk Settings")
+    config_data = config_doc.configuration or "{}"
+
+    frappe.cache().set_value(cache_key, config_data)
+    return json.loads(config_data)
+
+def update_desk_cache():
+    cache_key = "desk_settings_cache"
+    config_doc = frappe.get_single("Desk Settings")
+    config_data = config_doc.configuration or "{}"
+    frappe.cache().set_value(cache_key, config_data)

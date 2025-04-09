@@ -25,6 +25,10 @@ doc_events = {
         "before_insert": "core.api.facility.security",
         "validate": "core.api.facility.validate_status"
     },
+
+    "Desk Settings":{
+        "on_update": "core.update_desk_cache"
+    },
     "Employee": {
         "before_validate": "core.api.employee.before_validate",
         "validate": "core.api.employee.validate_user_status",
