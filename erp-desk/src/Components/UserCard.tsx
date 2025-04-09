@@ -3,7 +3,10 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import LoginIcon from '@mui/icons-material/Login';
 import WorkingHoursBarGraph from './workingHoursBarGraph';
-const UserCard = () => {
+import React, { useEffect, useState } from 'react';
+import { getEmployeeActivity } from '../Utils/helpers';
+const UserCard: React.FC<any> = ({ }) => {
+    const [empData, setEmpData] = useState({})
     const data = {
         Mon: 8,
         Tue: 5,
@@ -13,12 +16,21 @@ const UserCard = () => {
         Sat: 0,
         Sun: 0,
     };
+    useEffect(() => {
+        const employeeData = async () => {
+            const temp = await getEmployeeActivity()
+            console.log(temp);
+        }
+        employeeData()
+    }, [])
+
+
     return (
-        <div className="w-full sm:w-[450px] h-auto sm:h-[280px] !rounded-lg">
+        <div className="w-full h-auto sm:h-[280px] !rounded-lg">
             <div style={{ backgroundImage: `url(${userCard})` }} className="w-full h-full  !rounded-lg text-white bg-cover bg-center bg-no-repeat p-4"  >
                 <div className='flex flex-col sm:flex-row'>
                     <h1 className='font-[600] text-2xl'>Hello,</h1>
-                    <h1 className='font-[600] text-2xl'>Sriram Balaganesan  👋🏻</h1>
+                    <h1 className='font-[600] text-2xl'>  👋🏻</h1>
 
                 </div>
                 <div className='flex flex-wrap my-2 w-full gap-3 !mb-3'>

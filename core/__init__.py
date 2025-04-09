@@ -64,7 +64,7 @@ def get_desk_data():
     frappe.cache().set_value(cache_key, config_data)
     return json.loads(config_data)
 
-def update_desk_cache():
+def update_desk_cache(self, *args, **kwargs):
     cache_key = "desk_settings_cache"
     config_doc = frappe.get_single("Desk Settings")
     config_data = config_doc.configuration or "{}"

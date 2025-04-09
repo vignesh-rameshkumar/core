@@ -1,4 +1,5 @@
 import React from 'react';
+import { CustomTooltip } from '../Utils/helpers';
 
 type WorkingHoursData = {
   [key: string]: number;
@@ -26,18 +27,22 @@ const WorkingHoursBarGraph: React.FC<WorkingHoursBarGraphProps> = ({
         const heightPercent = (hours / calculatedMax) * 100;
 
         return (
+
           <div key={day} className='flex flex-col items-center w-[40px]'>
-            <div className='h-[80px] w-full flex items-end justify-center bg-[#ffffff30] rounded-md overflow-hidden'>
-              {hours > 0 && (
-                <div
-                  className='bg-[#3F7343] w-[80%] rounded transition-all duration-300'
-                  style={{ height: `${heightPercent}%` }}
-                  title={`${hours} hrs`}
-                />
-              )}
-            </div>
+            <CustomTooltip
+              title={`${hours} hrs`}>
+              <div className='h-[80px] w-full flex items-end justify-center bg-[#ffffff30] rounded-md overflow-hidden'>
+                {hours > 0 && (
+                  <div
+                    className='bg-[#3F7343] w-[80%] rounded transition-all duration-300'
+                    style={{ height: `${heightPercent}%` }}
+                  />
+                )}
+              </div>
+            </CustomTooltip>
             <p className='!uppercase text-xs mt-1 text-[#181D27]'>{day}</p>
           </div>
+
         );
       })}
     </div>
