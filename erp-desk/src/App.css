@@ -1,7 +1,5 @@
 @import "tailwindcss";
 
-/* styles.css or index.css or global.css */
-
 body, p, h1, h2, h3, h4, h5, h6, span, label, button, input, textarea, a {
     font-family: 'Inter', sans-serif;
   }

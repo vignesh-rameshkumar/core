@@ -4,6 +4,7 @@ import UserCard from './UserCard';
 import EmployeeSearchDrawer from './EmployeeSearchDrawer';
 import { useEffect, useState } from 'react';
 import { getModules } from '../Utils/helpers';
+import ProductsDrawer from './ProductsDrawer';
 
 const MainPage = () => {
     const [modules, setModules] = useState<any>([])
@@ -21,6 +22,8 @@ const MainPage = () => {
             style={{ backgroundImage: `url(${bgImage})` }}
         >
             <EmployeeSearchDrawer />
+            <ProductsDrawer />
+            
             <div className='grid grid-cols-1 md:grid-cols-3 gap-6 h-full overflow-y-auto py-25 px-5 sm:px-15'>
                 <UserCard />
                 {modules?.map((data: any) => <ModuleCard data={data} />)}
