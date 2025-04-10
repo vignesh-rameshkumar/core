@@ -69,3 +69,20 @@ def update_desk_cache(self, *args, **kwargs):
     config_doc = frappe.get_single("Desk Settings")
     config_data = config_doc.configuration or "{}"
     frappe.cache().set_value(cache_key, config_data)
+
+
+@frappe.whitelist()
+def search(txt, limit=20):
+    
+    limit = int(limit)
+    all_doctypes = frappe.get_all("DocType", filters={"istable": 0}, pluck="name")
+    permitted_doctypes = []
+
+    for doctype in all_doctypes:
+        if frappe.has_permission(doctype):  # This defaults to checking for "read"
+            if not txt or txt.lower() in doctype.lower():
+                permitted_doctypes.append({"name": doctype})
+            if len(permitted_doctypes) >= limit:
+                break
+
+    return permitted_doctypes
