@@ -3,12 +3,15 @@ import { useMediaQuery, InputBase } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import logoMini from "../Assets/agnikul.png";
 import logo from "../Assets/LogoAgnikul.png";
-import profilePic from "../Assets/background.png";
+import { useSelector } from 'react-redux';
+import profilePic from "../Assets/profile-vector.jpg";
+import { RootState } from "../Store";
 // import { IoMdHome } from "react-icons/io";
 // import { BsFillGridFill, BsPersonCheckFill, BsFillPersonLinesFill } from "react-icons/bs";
 
 const Header = () => {
     const isMobile = useMediaQuery("(max-width:600px)");
+    const userData = useSelector((state: RootState) => state.user.data);
     // const [activeMenu, setActiveMenu] = useState("Home");
 
     // const menuItems = [
@@ -17,9 +20,10 @@ const Header = () => {
     //     { name: "Request Approval", icon: <BsPersonCheckFill size={16} /> },
     //     { name: "Assignments", icon: <BsFillPersonLinesFill size={16} /> },
     // ];
+    console.log(userData);
 
     return (
-        <div className="bg-[#FFF] z-999 h-[10%] fixed top-0 w-full flex justify-between items-center px-4 sm:px-15 shadow-md z-50">
+        <div className="bg-[#FFF] z-999 h-[10%] w-full flex justify-between items-center px-4 sm:px-15 shadow-md z-50">
             <img
                 src={isMobile ? logoMini : logo}
                 alt="Logo"
@@ -54,9 +58,10 @@ const Header = () => {
                     />
                 </div>
                 <img
-                    src={profilePic}
+                    onClick={() => { }}
+                    src={userData?.user_image || profilePic}
                     alt="Profile"
-                    className="w-8 h-8 rounded-full border cursor-pointer"
+                    className="w-10 h-10 rounded-full border cursor-pointer"
                 />
             </div>
         </div>

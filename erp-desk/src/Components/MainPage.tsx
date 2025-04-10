@@ -18,13 +18,12 @@ const MainPage = () => {
     }, [])
 
     return (
-        <div className="bg-cover bg-center h-screen w-full !overflow-hidden"
+        <div className="bg-cover bg-center h-[calc(100vh-17%)] w-full !overflow-hidden"
             style={{ backgroundImage: `url(${bgImage})` }}
         >
             <EmployeeSearchDrawer />
             <ProductsDrawer />
-            
-            <div className='grid grid-cols-1 md:grid-cols-3 gap-6 h-full overflow-y-auto py-25 px-5 sm:px-15'>
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-6 h-full overflow-y-auto py-10 px-5 sm:px-15'>
                 <UserCard />
                 {modules?.map((data: any) => <ModuleCard data={data} />)}
             </div>

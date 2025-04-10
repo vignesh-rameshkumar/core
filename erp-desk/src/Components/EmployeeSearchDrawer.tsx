@@ -2,7 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { FaCaretLeft } from "react-icons/fa";
 import { InputBase, CircularProgress, Divider } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
-import profile from '../Assets/profile.png'
+import profile from '../Assets/profile-vector.jpg'
 import apiRequest from "../api/apiRequest";
 
 const EmployeeSearchDrawer = () => {

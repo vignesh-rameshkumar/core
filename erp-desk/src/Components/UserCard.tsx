@@ -5,6 +5,7 @@ import LoginIcon from '@mui/icons-material/Login';
 import WorkingHoursBarGraph from './workingHoursBarGraph';
 import React, { useEffect, useState } from 'react';
 import { getEmployeeActivity, getEmployeeActivityGraph } from '../Utils/helpers';
+import dayjs from 'dayjs';
 const UserCard: React.FC<any> = ({ }) => {
     const [empData, setEmpData] = useState<any>({})
     const [graphData, setGraphData] = useState({})
@@ -21,11 +22,11 @@ const UserCard: React.FC<any> = ({ }) => {
     }, [])
 
     return (
-        <div className="w-full h-auto sm:h-[280px] !rounded-lg">
+        <div className="w-full h-auto sm:h-[300px] !rounded-lg">
             <div style={{ backgroundImage: `url(${userCard})` }} className="w-full h-full  !rounded-lg text-white bg-cover bg-center bg-no-repeat p-4"  >
-                <div className='flex flex-col sm:flex-row'>
-                    <h1 className='font-[600] text-2xl'>Hello,</h1>
-                    <h1 className='font-[600] text-2xl'> {empData?.emp_name} 👋🏻</h1>
+                <div className='flex w-full justify-between items-start'>
+                    <h1 className='font-[600] text-xl pr-1'>👋🏻 Hello, {empData?.emp_name || "Dinesh Parthasarathy Krishan"}{" "}</h1>
+                    <h1 className='w-[30%] text-right font-[600] text-xl text-[#B6F2BA]'>{dayjs(new Date()).format('MMMM, DD')}</h1>
                 </div>
                 <div className='flex flex-wrap my-2 w-full gap-3 !mb-3'>
                     <div className='w-full sm:w-[52%] flex gap-3'>

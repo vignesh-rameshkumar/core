@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import Desk from "../Pages/desk";
+import { useDispatch } from "react-redux"
 import { Routes, useNavigate, Route } from "react-router-dom";
 import { getUserDetails } from "../Utils/helpers";
+import { fetchUserData } from "../Store/Slices/userSlice";
 
 const RootNavigation = () => {
     const navigate = useNavigate();
+    const dispatch = useDispatch();
     const [userDetails, setUserDetails] = useState<any>({});
     const cookiesArray = document.cookie.split("; ");
     const cookieData: { [key: string]: string } = {};
@@ -30,6 +33,9 @@ const RootNavigation = () => {
         }
     }, [hasPermission])
 
+    useEffect(() => {
+        dispatch(fetchUserData());
+    }, [dispatch]);
     return (
         <div>{hasPermission &&
             <Routes>
