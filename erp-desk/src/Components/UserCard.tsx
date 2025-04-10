@@ -25,7 +25,7 @@ const UserCard: React.FC<any> = ({ }) => {
         <div className="w-full h-auto sm:h-[300px] !rounded-lg">
             <div style={{ backgroundImage: `url(${userCard})` }} className="w-full h-full  !rounded-lg text-white bg-cover bg-center bg-no-repeat p-4"  >
                 <div className='flex w-full justify-between items-start'>
-                    <h1 className='font-[600] text-xl pr-1'>👋🏻 Hello, {empData?.emp_name || "Dinesh Parthasarathy Krishan"}{" "}</h1>
+                    <h1 className='font-[600] text-xl pr-1'>👋🏻 Hello, {empData?.emp_name || "User"}{" "}</h1>
                     <h1 className='w-[30%] text-right font-[600] text-xl text-[#B6F2BA]'>{dayjs(new Date()).format('MMMM, DD')}</h1>
                 </div>
                 <div className='flex flex-wrap my-2 w-full gap-3 !mb-3'>
