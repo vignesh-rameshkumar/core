@@ -5,13 +5,56 @@ import { styled } from '@mui/material/styles';
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { IoIosRocket } from "react-icons/io";
+import { toast } from "react-toastify";
+import { useFrappeAuth } from "frappe-react-sdk";
 
-export const mappingLabels : any= {
+interface ContainerType {
+    idx: number;
+    name: string;
+    icon: string;
+    apps: AppType[];
+}
+interface AppType {
+    idx: number;
+    label: string;
+    icon: string;
+    route: string;
+    departments: string[];
+    roles: string[];
+}
+export const mappingLabels: any = {
     projects: "Projects",
     departments: "Departments",
     facilities: "Facilities",
     rigs: "Rigs",
     mis: "MIS",
+};
+export const handleLogout = () => {
+    const { logout } = useFrappeAuth();
+    logout();
+    setTimeout(() => {
+        window.location.href = "/login";
+    }, 1000);
+};
+export const handleNavigateSearch = (name: string) => {
+    const path = name.toLowerCase().replace(/\s+/g, "-");
+    window.location.href = `/app/${path}`;
+};
+export const filterContainers = (
+    containers: ContainerType[],
+    userRoles: string[],
+    userDepartment: string
+): ContainerType[] => {
+    return containers
+        .map((container) => ({
+            ...container,
+            apps: container.apps.filter(
+                (app) =>
+                    app.roles.some((role) => userRoles.includes(role)) ||
+                    app.departments.includes(userDepartment)
+            ),
+        }))
+        .filter((container) => container.apps.length > 0);
 };
 
 export const getUserDetails = async () => {
@@ -28,10 +71,25 @@ export const getUserDetails = async () => {
         console.error('Error getting data', error)
     }
 }
+export const clearCacheData = async () => {
+    try {
+        const response = await apiRequest(`/api/method/frappe.sessions.clear`, "GET", "")
+        if (response) {
+            toast.info("Cache Cleared !", {
+                position: "bottom-right",
+            });
+            setTimeout(() => {
+                window.location.reload()
+            }, 1000);
+        }
+    } catch (error) {
+        console.error('Error getting data', error)
+    }
+}
 export const getEmployeeActivity = async () => {
     try {
         const response = await apiRequest(`/api/method/payroll_management.api.attendance?request_type=self&from_date=${dayjs(new Date()).format('YYYY-MM-DD')}&to_date=${dayjs(new Date()).format('YYYY-MM-DD')}&page=1&page_size=10`, "GET", "")
-        if (response?.message) {
+        if (response?.message?.records > 0) {
             const transformedArray = response?.message?.records[0]
             return transformedArray
         } else {

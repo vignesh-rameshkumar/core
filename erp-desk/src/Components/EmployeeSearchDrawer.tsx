@@ -7,7 +7,6 @@ import apiRequest from "../api/apiRequest";
 
 const EmployeeSearchDrawer = () => {
   const [showDrawer, setShowDrawer] = useState(false);
-  const [searchValue, setSearchValue] = useState("");
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -40,9 +39,9 @@ const EmployeeSearchDrawer = () => {
     }
 
   }
+  
   const handleSearch = (e: any) => {
     const value = e.target.value;
-    setSearchValue(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       fetchEmployees(value);
@@ -54,7 +53,7 @@ const EmployeeSearchDrawer = () => {
       {/* Toggle Button */}
       <div
         className={`fixed top-1/2 right-0 -translate-y-1/2  text-white rounded-l cursor-pointer py-10 !z-9999 px-1 ${showDrawer ? "bg-[#4D8C52]" : "bg-[#FFF]"}`}
-        onClick={() => { setShowDrawer(!showDrawer); setSearchValue('') }}
+        onClick={() => { setShowDrawer(!showDrawer); }}
       >
         <FaCaretLeft
           className={` transition-transform duration-300 ${showDrawer ? "-rotate-180 text-[#FFF]" : "text-[#4D8C52]"
