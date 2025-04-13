@@ -1,7 +1,7 @@
 import frappe
 from frappe.utils import cstr
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def search(query):
     """
     Global search API that returns results based on the provided query.
