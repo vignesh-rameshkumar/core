@@ -1,7 +1,7 @@
-from frappe import _, throw  # Import for translations and error handling
-from frappe.utils.response import json_handler  # Import for JSON responses
-import frappe  # Main Frappe framework import
-import json  # For JSON handling
+from frappe import _, throw
+from frappe.utils.response import json_handler
+import frappe
+import json
 
 @frappe.whitelist()
 def approvers(code):
@@ -29,50 +29,67 @@ def approvers(code):
         # Handle exceptions and return an error response
         throw(_("An error occurred while fetching approvers: {0}").format(str(e)))
 
+
 @frappe.whitelist()
-def list(limit=20, start=0):
+def list(limit=20, start=0, query=None):
     try:
-        # Convert limit and start to integers
+        # Convert pagination parameters to integers
         limit = int(limit)
         start = int(start)
 
-        # Fetch all active parent projects
-        active_projects = frappe.get_all(
-            "AGK_Projects",
-            filters={"status": "Active"},
-            fields=["name", "primary_approver"]
-        )
-        active_project_names = [project["name"] for project in active_projects]
-
-        # Fetch child details only for active parent projects with limit and offset
-        details = [
-            {
-                "name1": detail["name1"],
-                "code": detail["code"],
-                "approver": next(
-                    (project["primary_approver"] for project in active_projects if project["name"] == detail["parent"]),
-                    None
-                )
-            }
-            for detail in frappe.get_all(
-                "Project Detail",
-                filters={"parent": ["in", active_project_names]},
-                fields=["name1", "code", "parent"],
-                start=start,
-                limit=limit
-            )
-        ]
-
-        # Check if there are more records
-        total_count = frappe.db.count("Project Detail", {"parent": ["in", active_project_names]})
-        has_more = (start + limit) < total_count
-
-        # Return the result with pagination info
-        return {
-            "details": details,
-            "has_more": has_more,
-            "next_start": start + limit
+        results = {
+            "details": [],
+            "has_more": False,
+            "next_start": start
         }
+
+        params = {
+            "limit": limit,
+            "start": start
+        }
+
+        # Base SQL with JOIN for active projects and their details
+        base_sql = """
+            FROM `tabAGK_Projects` p
+            INNER JOIN `tabProject Detail` pd ON pd.parent = p.name
+            WHERE p.status = 'Active'
+        """
+
+        # If search query is provided, include filters
+        if query:
+            query_param = f"%{query}%"
+            base_sql += """
+                AND (
+                    p.project_name LIKE %(query)s
+                    OR p.indicator LIKE %(query)s
+                    OR pd.name1 LIKE %(query)s
+                    OR pd.code LIKE %(query)s
+                )
+            """
+            params["query"] = query_param
+
+        # Fetch paginated results
+        details = frappe.db.sql(f"""
+            SELECT pd.name1, pd.code, p.primary_approver as approver
+            {base_sql}
+            ORDER BY pd.name1
+            LIMIT %(limit)s OFFSET %(start)s
+        """, params, as_dict=1)
+
+        # Count total matching rows
+        count_result = frappe.db.sql(f"""
+            SELECT COUNT(*) as total
+            {base_sql}
+        """, params, as_dict=1)
+        total_count = count_result[0]["total"]
+
+        # Set response
+        results["details"] = details
+        results["has_more"] = (start + limit) < total_count
+        results["next_start"] = start + limit
+
+        return results
+
     except Exception as e:
-        # Handle exceptions and return an error response
         frappe.throw(_("An error occurred while fetching project details: {0}").format(str(e)))
+

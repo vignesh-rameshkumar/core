@@ -7,14 +7,6 @@ import time
 from datetime import date
 
 def paginate():
-    """
-    An improved decorator to add pagination functionality to Frappe API endpoints.
-
-    Features:
-    - Automatically handles limit + 1 logic
-    - Transparently manages pagination for different query methods
-    - Supports various Frappe query methods
-    """
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
@@ -97,53 +89,52 @@ def paginate():
 
 
 def rate_limit(time_window: int = 5):
-
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
-            # Get current user
             user = frappe.session.user
 
-            # Generate a unique key for this request
-            # Combine user + function name + request data
-            request_data = frappe.request.data if hasattr(frappe, 'request') and hasattr(frappe.request, 'data') else b''
-
-            # Convert request data to string if it's not already
+            request_data = getattr(frappe.request, "data", b"")
             if isinstance(request_data, bytes):
                 try:
-                    request_data = request_data.decode('utf-8')
+                    request_data = request_data.decode("utf-8")
                 except UnicodeDecodeError:
-                    # If we can't decode, use the raw bytes for hashing
                     pass
 
-            # Create a hash of the combined data
             payload_str = f"{user}:{func.__name__}:{request_data}"
-            request_hash = hashlib.md5(payload_str.encode('utf-8')).hexdigest()
-
-            # Create a cache key
+            request_hash = hashlib.md5(payload_str.encode("utf-8")).hexdigest()
             cache_key = f"rate_limit:{request_hash}"
 
-            # Check if this request has been made recently
             last_request_time = frappe.cache().get_value(cache_key)
-
             current_time = time.time()
 
             if last_request_time:
                 elapsed = current_time - float(last_request_time)
-
-                # If the request is within the time window, block it
                 if elapsed < time_window:
-                    remaining_time = round(time_window - elapsed, 2)
                     frappe.throw(
-                        f"Throttled. Duplicate request detected.",
-                        frappe.DuplicateEntryError
+                        "Throttled. Duplicate request detected.",
+                        frappe.DuplicateEntryError,
                     )
 
-            # Store the current timestamp for this request
-            frappe.cache().set_value(cache_key, current_time, expires_in_sec=time_window)
+            try:
+                result = func(*args, **kwargs)
 
-            # Execute the original function
-            return func(*args, **kwargs)
+                # 🔍 Decision logic for caching
+                should_cache = True
+
+                if isinstance(result, dict):
+                    # If success=False, don't cache
+                    if result.get("success") is False:
+                        should_cache = False
+
+                if should_cache:
+                    frappe.cache().set_value(cache_key, current_time, expires_in_sec=time_window)
+
+                return result
+
+            except Exception:
+                # Don't cache on failure
+                raise
 
         return wrapper
     return decorator
