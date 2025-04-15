@@ -24,7 +24,7 @@ const MainPage = () => {
     );
 
     return (
-        <div className="bg-cover bg-center h-[calc(100vh-17%)] w-full !overflow-hidden"
+        <div className="bg-cover bg-center h-[calc(100vh-15%)] w-full !overflow-hidden"
             style={{ backgroundImage: `url(${bgImage})` }}
         >
             <EmployeeSearchDrawer />

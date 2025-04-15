@@ -71,7 +71,7 @@ const Header = () => {
 
 
     return (
-        <div className="bg-[#FFF] z-999 h-[10%] w-full flex justify-between items-center px-4 sm:px-15 shadow-md z-50">
+        <div className="bg-[#FFF] z-999 h-[8%] w-full flex justify-between items-center px-4 sm:px-15 shadow-md z-50">
             <img
                 src={isMobile ? logoMini : logo}
                 alt="Logo"

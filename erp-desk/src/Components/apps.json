@@ -1,0 +1,175 @@
+{
+  "containers": [
+    {
+      "idx": 1,
+      "name": "Employee Wellness",
+      "icon": "/files/employee_well.png",
+      "apps": [
+        {
+          "idx": 1,
+          "label": "Payroll Management",
+          "icon": "/files/employee_well.png",
+          "route": "/payroll_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 2,
+          "label": "HR Operations",
+          "icon": "/files/employee_well.png",
+          "route": "/hrops_desk",
+          "departments": ["HR"],
+          "roles": ["HR Lead", "HR User", "HR Manager"]
+        },
+        {
+          "idx": 3,
+          "label": "Food & Beverages",
+          "icon": "/files/employee_well.png",
+          "route": "/food_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 4,
+          "label": "Recruitment Management",
+          "icon": "/files/employee_well.png",
+          "route": "/recruitment_desk",
+          "departments": ["HR"],
+          "roles": ["Department Lead", "Department Head"]
+        }
+      ]
+    },
+    {
+      "idx": 2,
+      "name": "Business Operations",
+      "icon": "/files/employee_well.png",
+      "apps": [
+        {
+          "idx": 1,
+          "label": "Sourcing Management",
+          "icon": "/files/employee_well.png",
+          "route": "/sourcing_desk",
+          "departments": ["Inventory"],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 2,
+          "label": "Procurement Management",
+          "icon": "/files/employee_well.png",
+          "route": "/pms_desk",
+          "departments": ["Business Operations"],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 3,
+          "label": "Budget Management",
+          "icon": "/files/employee_well.png",
+          "route": "/budget_desk",
+          "departments": [],
+          "roles": ["Super Admin", "Budget Owner"]
+        }
+      ]
+    },
+    {
+      "idx": 3,
+      "name": "Process Operations",
+      "icon": "/files/employee_well.png",
+      "apps": [
+        {
+          "idx": 1,
+          "label": "Quality Management",
+          "icon": "/files/employee_well.png",
+          "route": "/quality_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 2,
+          "label": "Safety Management",
+          "icon": "/files/employee_well.png",
+          "route": "/safetydashboard",
+          "departments": [],
+          "roles": ["Employee"]
+        }
+      ]
+    },
+    {
+      "idx": 4,
+      "name": "Support Operations",
+      "icon": "/files/employee_well.png",
+      "apps": [
+        {
+          "idx": 1,
+          "label": "Maintenance Management",
+          "icon": "/files/employee_well.png",
+          "route": "/maintenance_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 2,
+          "label": "Engineering & Infrastructure",
+          "icon": "/files/employee_well.png",
+          "route": "/EngineerInfrastructure",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 3,
+          "label": "Packaging Management",
+          "icon": "/files/employee_well.png",
+          "route": "/packaging_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 4,
+          "label": "Fleet Management",
+          "icon": "/files/employee_well.png",
+          "route": "/fleet_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        }
+      ]
+    },
+    {
+      "idx": 4,
+      "name": "Product",
+      "icon": "/files/employee_well.png",
+      "apps": [
+        {
+          "idx": 1,
+          "label": "CAD Management",
+          "icon": "/files/employee_well.png",
+          "route": "/Cad",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 2,
+          "label": "Design For Realization",
+          "icon": "/files/employee_well.png",
+          "route": "/dfr_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 3,
+          "label": "Manufacturing Management",
+          "icon": "/files/employee_well.png",
+          "route": "/manufacturing_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        },
+        {
+          "idx": 4,
+          "label": "Instrumentation & software",
+          "icon": "/files/employee_well.png",
+          "route": "/instsoft_desk",
+          "departments": [],
+          "roles": ["Employee"]
+        }
+      ]
+    }
+  ]
+}
