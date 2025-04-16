@@ -1,12 +1,10 @@
 import apiRequest from "../api/apiRequest";
-import dayjs from 'dayjs';
 import { Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { IoIosRocket } from "react-icons/io";
 import { toast } from "react-toastify";
-import { useFrappeAuth } from "frappe-react-sdk";
 
 interface ContainerType {
     idx: number;
@@ -22,6 +20,8 @@ interface AppType {
     departments: string[];
     roles: string[];
 }
+
+
 export const mappingLabels: any = {
     projects: "Projects",
     departments: "Departments",
@@ -29,13 +29,7 @@ export const mappingLabels: any = {
     rigs: "Rigs",
     mis: "MIS",
 };
-export const handleLogout = () => {
-    const { logout } = useFrappeAuth();
-    logout();
-    setTimeout(() => {
-        window.location.href = "/login";
-    }, 1000);
-};
+
 export const handleNavigateSearch = (name: string) => {
     const path = name.toLowerCase().replace(/\s+/g, "-");
     window.location.href = `/app/${path}`;

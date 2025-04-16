@@ -7,9 +7,10 @@ import { useSelector } from 'react-redux';
 import profilePic from "../Assets/profile-vector.jpg";
 import { RootState } from "../Store";
 import { useEffect, useRef, useState } from "react";
-import { clearCacheData, handleLogout, handleNavigateSearch } from "../Utils/helpers";
+import { clearCacheData, handleNavigateSearch } from "../Utils/helpers";
 import apiRequest from "../api/apiRequest";
 import { IoIosClose } from "react-icons/io";
+import { useFrappeAuth } from "frappe-react-sdk";
 
 // import { IoMdHome } from "react-icons/io";
 // import { BsFillGridFill, BsPersonCheckFill, BsFillPersonLinesFill } from "react-icons/bs";
@@ -23,7 +24,13 @@ const Header = () => {
     const [searchData, setSearchData] = useState([]);
     const [searchText, setSearchText] = useState("");
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
+    const { logout } = useFrappeAuth();
+    const handleLogout = () => {
+        logout();
+        setTimeout(() => {
+            window.location.href = "/login";
+        }, 1000);
+    };
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         const query = e.target.value;
         setSearchText(query);
