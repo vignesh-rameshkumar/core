@@ -88,9 +88,9 @@ export const clearCacheData = async () => {
 }
 export const getEmployeeActivity = async () => {
     try {
-        const response = await apiRequest(`/api/method/payroll_management.api.attendance?request_type=self&from_date=${dayjs(new Date()).format('YYYY-MM-DD')}&to_date=${dayjs(new Date()).format('YYYY-MM-DD')}&page=1&page_size=10`, "GET", "")
-        if (response?.message?.records > 0) {
-            const transformedArray = response?.message?.records[0]
+        const response = await apiRequest(`/api/method/payroll_management.api.quick_access?lop_month=All`, "GET", "")
+        if (response?.message) {
+            const transformedArray = response?.message
             return transformedArray
         } else {
             return {}

@@ -3,12 +3,12 @@
     {
       "idx": 1,
       "name": "Employee Wellness",
-      "icon": "/files/employee_well.png",
+      "icon": "/files/employee.svg",
       "apps": [
         {
           "idx": 1,
           "label": "Payroll Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/card.svg",
           "route": "/payroll_desk",
           "departments": [],
           "roles": ["Employee"]
@@ -16,15 +16,15 @@
         {
           "idx": 2,
           "label": "HR Operations",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/UserPlus.svg",
           "route": "/hrops_desk",
           "departments": ["HR"],
-          "roles": ["HR Lead", "HR User", "HR Manager"]
+          "roles": ["HR Lead","HR User","HR Manager"]
         },
         {
           "idx": 3,
           "label": "Food & Beverages",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/food.svg",
           "route": "/food_desk",
           "departments": [],
           "roles": ["Employee"]
@@ -32,7 +32,7 @@
         {
           "idx": 4,
           "label": "Recruitment Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/recruitment.svg",
           "route": "/recruitment_desk",
           "departments": ["HR"],
           "roles": ["Department Lead", "Department Head"]
@@ -42,12 +42,12 @@
     {
       "idx": 2,
       "name": "Business Operations",
-      "icon": "/files/employee_well.png",
+      "icon": "/files/business.svg",
       "apps": [
         {
           "idx": 1,
           "label": "Sourcing Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/sourcing.svg",
           "route": "/sourcing_desk",
           "departments": ["Inventory"],
           "roles": ["Employee"]
@@ -55,7 +55,7 @@
         {
           "idx": 2,
           "label": "Procurement Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/procurement.svg",
           "route": "/pms_desk",
           "departments": ["Business Operations"],
           "roles": ["Employee"]
@@ -63,22 +63,22 @@
         {
           "idx": 3,
           "label": "Budget Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/budget.svg",
           "route": "/budget_desk",
           "departments": [],
-          "roles": ["Super Admin", "Budget Owner"]
+          "roles": ["Super Admin","Budget Owner"]
         }
       ]
     },
     {
       "idx": 3,
       "name": "Process Operations",
-      "icon": "/files/employee_well.png",
+      "icon": "/files/process.svg",
       "apps": [
         {
           "idx": 1,
           "label": "Quality Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/quality.svg",
           "route": "/quality_desk",
           "departments": [],
           "roles": ["Employee"]
@@ -86,22 +86,22 @@
         {
           "idx": 2,
           "label": "Safety Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/safety.svg",
           "route": "/safetydashboard",
           "departments": [],
           "roles": ["Employee"]
         }
-      ]
+       ]
     },
     {
       "idx": 4,
       "name": "Support Operations",
-      "icon": "/files/employee_well.png",
+      "icon": "/files/support.svg",
       "apps": [
         {
           "idx": 1,
           "label": "Maintenance Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/maintenace.svg",
           "route": "/maintenance_desk",
           "departments": [],
           "roles": ["Employee"]
@@ -109,7 +109,7 @@
         {
           "idx": 2,
           "label": "Engineering & Infrastructure",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/engineering.svg",
           "route": "/EngineerInfrastructure",
           "departments": [],
           "roles": ["Employee"]
@@ -117,30 +117,30 @@
         {
           "idx": 3,
           "label": "Packaging Management",
-          "icon": "/files/employee_well.png",
-          "route": "/packaging_desk",
+          "icon": "/files/Package.svg",
+          "route": "/Packaging_desk",
           "departments": [],
           "roles": ["Employee"]
         },
         {
           "idx": 4,
           "label": "Fleet Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/fleet.svg",
           "route": "/fleet_desk",
           "departments": [],
           "roles": ["Employee"]
         }
-      ]
+       ]
     },
     {
       "idx": 4,
       "name": "Product",
-      "icon": "/files/employee_well.png",
+      "icon": "/files/product.svg",
       "apps": [
         {
           "idx": 1,
           "label": "CAD Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/cad.svg",
           "route": "/Cad",
           "departments": [],
           "roles": ["Employee"]
@@ -148,7 +148,7 @@
         {
           "idx": 2,
           "label": "Design For Realization",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/dfr.svg",
           "route": "/dfr_desk",
           "departments": [],
           "roles": ["Employee"]
@@ -156,7 +156,7 @@
         {
           "idx": 3,
           "label": "Manufacturing Management",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/manufacturing.svg",
           "route": "/manufacturing_desk",
           "departments": [],
           "roles": ["Employee"]
@@ -164,12 +164,12 @@
         {
           "idx": 4,
           "label": "Instrumentation & software",
-          "icon": "/files/employee_well.png",
+          "icon": "/files/instrumentation.svg",
           "route": "/instsoft_desk",
           "departments": [],
           "roles": ["Employee"]
         }
-      ]
+       ]
     }
   ]
 }

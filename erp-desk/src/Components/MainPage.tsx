@@ -11,7 +11,7 @@ import { RootState } from '../Store';
 
 const MainPage = () => {
     const dispatch = useDispatch();
-    const { userData, modules, loading } = useSelector((state: RootState) => state.user);
+    const { userData, modules } = useSelector((state: RootState) => state.user);
 
     useEffect(() => {
         dispatch(fetchUserData());
