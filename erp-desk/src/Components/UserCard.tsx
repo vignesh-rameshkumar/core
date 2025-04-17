@@ -4,7 +4,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import LoginIcon from '@mui/icons-material/Login';
 import WorkingHoursBarGraph from './workingHoursBarGraph';
 import React, { useEffect, useState } from 'react';
-import { getEmployeeActivity, getEmployeeActivityGraph } from '../Utils/helpers';
+import { calculateWorkingHours, convertTimeStringToReadable, getEmployeeActivity, getEmployeeActivityGraph } from '../Utils/helpers';
 import dayjs from 'dayjs';
 import { useSelector } from 'react-redux';
 import { RootState } from '../Store';
@@ -55,10 +55,12 @@ const UserCard: React.FC<any> = ({ }) => {
                             Total Working hrs
                             <AccessTimeIcon className='rounded-full  text-[#535862] !text-lg ' />
                         </div>
-                        <h2 className='font-bold text-[#181D27]'>{empData?.monthly_data?.total_working_hours || "-"}</h2>
+                        <h2 className='font-bold text-[#181D27]'>{empData?.todays_att?.log_out ? convertTimeStringToReadable(empData?.todays_att?.working_hours) : calculateWorkingHours(empData?.todays_att?.log_in)}</h2>
                     </div>
                 </div>
-                <WorkingHoursBarGraph data={graphData} />
+                <div className='!mt-3'>
+                    <WorkingHoursBarGraph data={graphData} />
+                </div>
             </div>
         </div>
     )

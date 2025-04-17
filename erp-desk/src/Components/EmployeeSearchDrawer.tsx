@@ -8,7 +8,7 @@ import apiRequest from "../api/apiRequest";
 
 const EmployeeSearchDrawer = () => {
   const [showDrawer, setShowDrawer] = useState(false);
-  const [employees, setEmployees] = useState([]);
+  const [employees, setEmployees] = useState<any>([]);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [start, setStart] = useState(0);
@@ -60,7 +60,7 @@ const EmployeeSearchDrawer = () => {
       const result = response?.message?.data || [];
       const hasMoreFlag = response?.message?.has_more;
 
-      setEmployees((prev) => [...prev, ...result]);
+      setEmployees((prev: any) => [...prev, ...result]);
       setHasMore(hasMoreFlag);
       setStart(response?.message?.next_start || startIndex + 20);
     } catch (error) {

@@ -23,7 +23,7 @@ const WorkingHoursBarGraph: React.FC<WorkingHoursBarGraphProps> = ({
     maxHours || Math.max(...Object.values(graphData), 8);
 
   return (
-    <div className='flex gap-3 py-4 px-2 bg-[#FFFFFF99] rounded-xl justify-center'>
+    <div className='flex gap-3 py-4  bg-[#FFFFFF99] rounded-xl justify-center'>
       {days.map((day) => {
         const hours = graphData[day] || 0;
         const heightPercent = (hours / calculatedMax) * 100;
@@ -31,10 +31,10 @@ const WorkingHoursBarGraph: React.FC<WorkingHoursBarGraphProps> = ({
         return (
           <div key={day} className='flex flex-col items-center w-[40px]'>
             <CustomTooltip title={`${hours} hrs`}>
-              <div className='h-[80px] w-full flex items-end justify-center bg-[#ffffff30] rounded-md overflow-hidden'>
+              <div className='min-h-[100px] h-full w-full flex items-end justify-center bg-[#ffffff30] rounded-md overflow-hidden'>
                 {hours > 0 && (
                   <div
-                    className='bg-[#3F7343] w-[80%] rounded transition-all duration-300'
+                    className='bg-[#3F7343] w-[90%] rounded transition-all duration-300'
                     style={{ height: `${heightPercent}%` }}
                   />
                 )}

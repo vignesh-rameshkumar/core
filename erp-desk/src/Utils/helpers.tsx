@@ -65,6 +65,32 @@ export const getUserDetails = async () => {
         console.error('Error getting data', error)
     }
 }
+export const calculateWorkingHours = (logInTimeStr: string): string => {
+    if(!logInTimeStr) return "-"
+    const [logInHours, logInMinutes] = logInTimeStr?.split(':')?.map(Number);
+
+    const now = new Date();
+    const logInTime = new Date();
+    logInTime?.setHours(logInHours, logInMinutes, 0, 0);
+
+    const diffMs = now?.getTime() - logInTime?.getTime();
+
+    if (diffMs < 0) return "Invalid time"; // in case login is in future
+
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${diffHours}h ${diffMinutes}m`;
+}
+export function convertTimeStringToReadable(timeStr: string): string {
+    const [hoursStr, minutesStr] = timeStr?.split(':');
+    const hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+  
+    return `${hours}h ${minutes}m`;
+  }
+  
+  
 export const clearCacheData = async () => {
     try {
         const response = await apiRequest(`/api/method/frappe.sessions.clear`, "GET", "")
