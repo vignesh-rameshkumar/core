@@ -5,6 +5,9 @@ import SearchIcon from "@mui/icons-material/Search";
 import InfiniteScroll from "react-infinite-scroll-component";
 import profile from "../Assets/profile-vector.jpg";
 import apiRequest from "../api/apiRequest";
+import { handleCopy } from "../Utils/helpers";
+import { MdContentCopy } from "react-icons/md";
+
 
 const EmployeeSearchDrawer = () => {
   const [showDrawer, setShowDrawer] = useState(false);
@@ -13,7 +16,7 @@ const EmployeeSearchDrawer = () => {
   const [hasMore, setHasMore] = useState(true);
   const [start, setStart] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
-
+  const [copiedField, setCopiedField] = useState<{ index: number; field: "email" | "phone" } | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
 
@@ -93,9 +96,8 @@ const EmployeeSearchDrawer = () => {
       {/* Drawer */}
       <div
         ref={drawerRef}
-        className={`fixed top-0 right-0 h-full w-[90%] sm:w-[30%] bg-[#FFF] shadow-lg border-l transition-transform duration-300 z-999 ${
-          showDrawer ? "translate-x-0" : "translate-x-full"
-        }`}
+        className={`fixed top-0 right-0 h-full w-[90%] sm:w-[30%] bg-[#FFF] shadow-lg border-l transition-transform duration-300 z-999 ${showDrawer ? "translate-x-0" : "translate-x-full"
+          }`}
       >
         <div className="p-4 border-b">
           <div className="relative flex items-center border border-gray-300 rounded-lg px-2 sm:px-3 w-full">
@@ -147,27 +149,62 @@ const EmployeeSearchDrawer = () => {
                       <div className="text-xs text-gray-700">{emp.department}</div>
                     </div>
                     <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        emp.status === "Online"
+                      className={`text-xs px-2 py-1 rounded-full ${emp.status === "Online"
                           ? "bg-green-100 text-green-600"
                           : "bg-red-100 text-red-600"
-                      }`}
+                        }`}
                     >
                       {emp.status}
                     </span>
                   </div>
-                  <div className="flex mt-4 w-full">
+
+                  {/* Email Row */}
+                  <div className="flex mt-4 w-full items-center">
                     <div className="text-sm text-[#181D27] w-[15%]">Email</div>
-                    <div className="text-sm font-bold text-[#181D27] mx-3">
+                    <div className="text-sm font-bold text-[#181D27] mx-3 flex items-center gap-2 relative">
                       {emp.email || "-"}
+                      {emp.email && (
+                        <>
+                          <MdContentCopy
+                            size={16}
+                            className="cursor-pointer text-gray-500 hover:text-black"
+                            onClick={() => handleCopy(emp.email, "email", idx, setCopiedField)}
+                          />
+                          {copiedField?.index === idx &&
+                            copiedField.field === "email" && (
+                              <span className="absolute top-[-20px] right-0 text-xs text-green-600 bg-white px-2 rounded shadow">
+                                Email Copied
+                              </span>
+                            )}
+                        </>
+                      )}
                     </div>
                   </div>
-                  <div className="flex w-full">
+
+                  {/* Phone Row */}
+                  <div className="flex w-full items-center">
                     <div className="text-sm text-[#181D27] w-[15%]">Mobile</div>
-                    <div className="text-sm font-bold text-[#181D27] mx-3">
+                    <div className="text-sm font-bold text-[#181D27] mx-3 flex items-center gap-2 relative">
                       {emp.phone || "-"}
+                      {emp.phone && (
+                        <>
+                          <MdContentCopy
+                            size={16}
+                            className="cursor-pointer text-gray-500 hover:text-black"
+                            onClick={() => handleCopy(emp.phone, "phone", idx, setCopiedField)}
+                          />
+                          {copiedField?.index === idx &&
+                            copiedField.field === "phone" && (
+                              <span className="absolute top-[-20px] left-0 text-xs text-green-600 bg-white px-2 rounded shadow">
+                                Number Copied
+                              </span>
+                            )}
+                        </>
+                      )}
                     </div>
                   </div>
+
+                  {/* Location */}
                   <div className="flex w-full">
                     <div className="text-sm text-[#181D27] w-[15%]">Location</div>
                     <div className="text-sm font-bold text-[#181D27] mx-3">

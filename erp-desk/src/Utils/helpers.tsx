@@ -2,7 +2,7 @@ import apiRequest from "../api/apiRequest";
 import { Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { SetStateAction, useEffect, useState } from "react";
 import { IoIosRocket } from "react-icons/io";
 import { toast } from "react-toastify";
 
@@ -65,8 +65,16 @@ export const getUserDetails = async () => {
         console.error('Error getting data', error)
     }
 }
+export const handleCopy = (text: string, field: "email" | "phone", index: number, setCopiedField: SetStateAction<any>) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField({ index, field });
+    setTimeout(() => setCopiedField(null), 1500);
+};
+
+
 export const calculateWorkingHours = (logInTimeStr: string): string => {
-    if(!logInTimeStr) return "-"
+    if (!logInTimeStr) return "-"
     const [logInHours, logInMinutes] = logInTimeStr?.split(':')?.map(Number);
 
     const now = new Date();
@@ -86,11 +94,11 @@ export function convertTimeStringToReadable(timeStr: string): string {
     const [hoursStr, minutesStr] = timeStr?.split(':');
     const hours = parseInt(hoursStr, 10);
     const minutes = parseInt(minutesStr, 10);
-  
+
     return `${hours}h ${minutes}m`;
-  }
-  
-  
+}
+
+
 export const clearCacheData = async () => {
     try {
         const response = await apiRequest(`/api/method/frappe.sessions.clear`, "GET", "")
