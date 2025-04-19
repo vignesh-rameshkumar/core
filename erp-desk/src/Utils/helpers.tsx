@@ -1,12 +1,10 @@
 import apiRequest from "../api/apiRequest";
-import dayjs from 'dayjs';
 import { Tooltip, tooltipClasses, TooltipProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { SetStateAction, useEffect, useState } from "react";
 import { IoIosRocket } from "react-icons/io";
 import { toast } from "react-toastify";
-import { useFrappeAuth } from "frappe-react-sdk";
 
 interface ContainerType {
     idx: number;
@@ -22,6 +20,8 @@ interface AppType {
     departments: string[];
     roles: string[];
 }
+
+
 export const mappingLabels: any = {
     projects: "Projects",
     departments: "Departments",
@@ -29,13 +29,7 @@ export const mappingLabels: any = {
     rigs: "Rigs",
     mis: "MIS",
 };
-export const handleLogout = () => {
-    const { logout } = useFrappeAuth();
-    logout();
-    setTimeout(() => {
-        window.location.href = "/login";
-    }, 1000);
-};
+
 export const handleNavigateSearch = (name: string) => {
     const path = name.toLowerCase().replace(/\s+/g, "-");
     window.location.href = `/app/${path}`;
@@ -71,6 +65,40 @@ export const getUserDetails = async () => {
         console.error('Error getting data', error)
     }
 }
+export const handleCopy = (text: string, field: "email" | "phone", index: number, setCopiedField: SetStateAction<any>) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField({ index, field });
+    setTimeout(() => setCopiedField(null), 1500);
+};
+
+
+export const calculateWorkingHours = (logInTimeStr: string): string => {
+    if (!logInTimeStr) return "-"
+    const [logInHours, logInMinutes] = logInTimeStr?.split(':')?.map(Number);
+
+    const now = new Date();
+    const logInTime = new Date();
+    logInTime?.setHours(logInHours, logInMinutes, 0, 0);
+
+    const diffMs = now?.getTime() - logInTime?.getTime();
+
+    if (diffMs < 0) return "Invalid time"; // in case login is in future
+
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+    return `${diffHours}h ${diffMinutes}m`;
+}
+export function convertTimeStringToReadable(timeStr: string): string {
+    const [hoursStr, minutesStr] = timeStr?.split(':');
+    const hours = parseInt(hoursStr, 10);
+    const minutes = parseInt(minutesStr, 10);
+
+    return `${hours}h ${minutes}m`;
+}
+
+
 export const clearCacheData = async () => {
     try {
         const response = await apiRequest(`/api/method/frappe.sessions.clear`, "GET", "")
@@ -88,9 +116,9 @@ export const clearCacheData = async () => {
 }
 export const getEmployeeActivity = async () => {
     try {
-        const response = await apiRequest(`/api/method/payroll_management.api.attendance?request_type=self&from_date=${dayjs(new Date()).format('YYYY-MM-DD')}&to_date=${dayjs(new Date()).format('YYYY-MM-DD')}&page=1&page_size=10`, "GET", "")
-        if (response?.message?.records > 0) {
-            const transformedArray = response?.message?.records[0]
+        const response = await apiRequest(`/api/method/payroll_management.api.quick_access?lop_month=All`, "GET", "")
+        if (response?.message) {
+            const transformedArray = response?.message
             return transformedArray
         } else {
             return {}

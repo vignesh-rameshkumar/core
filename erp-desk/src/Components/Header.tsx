@@ -7,23 +7,31 @@ import { useSelector } from 'react-redux';
 import profilePic from "../Assets/profile-vector.jpg";
 import { RootState } from "../Store";
 import { useEffect, useRef, useState } from "react";
-import { clearCacheData, handleLogout, handleNavigateSearch } from "../Utils/helpers";
+import { clearCacheData, handleNavigateSearch } from "../Utils/helpers";
 import apiRequest from "../api/apiRequest";
 import { IoIosClose } from "react-icons/io";
+import { useFrappeAuth } from "frappe-react-sdk";
+import cake from "../Assets/cake.gif"
 
 // import { IoMdHome } from "react-icons/io";
 // import { BsFillGridFill, BsPersonCheckFill, BsFillPersonLinesFill } from "react-icons/bs";
 
-const Header = () => {
+const Header: React.FC<any> = ({ setShowGreetings }) => {
     const isMobile = useMediaQuery("(max-width:600px)");
-    const userData = useSelector((state: RootState) => state.user.data);
+    const { userData } = useSelector((state: RootState) => state.user);
     const [open, setOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [loading, setLoading] = useState(false);
     const [searchData, setSearchData] = useState([]);
     const [searchText, setSearchText] = useState("");
     const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
+    const { logout } = useFrappeAuth();
+    const handleLogout = () => {
+        logout();
+        setTimeout(() => {
+            window.location.href = "/login";
+        }, 1000);
+    };
     const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         const query = e.target.value;
         setSearchText(query);
@@ -71,13 +79,12 @@ const Header = () => {
 
 
     return (
-        <div className="bg-[#FFF] z-999 h-[10%] w-full flex justify-between items-center px-4 sm:px-15 shadow-md z-50">
+        <div className="bg-[#FFF] z-999 h-[8%] w-full flex justify-between items-center px-4 sm:px-15 shadow-md z-50">
             <img
                 src={isMobile ? logoMini : logo}
                 alt="Logo"
                 className="w-[7%] sm:w-[13%]"
             />
-
             {/* Desktop Menu */}
             {/* <div className="hidden sm:flex gap-4 bg-[#F5F5F5] p-2 border-[1px] border-[#E9EAEB] rounded-[5px]">
                 {menuItems.map((item) => (
@@ -162,6 +169,8 @@ const Header = () => {
                         </div>
                     )}
                 </div>
+                {(userData?.is_anniversary || userData?.is_birthday) && 
+                <div className="cursor-pointer " onClick={() => { setShowGreetings(true) }}><img src={cake} alt="" className="w-[40px] " /></div>}
             </div>
         </div>
     );

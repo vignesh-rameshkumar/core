@@ -8,13 +8,13 @@ export interface UserState {
   error: any;
 }
 
-export const fetchUserData = createAsyncThunk('user/fetchUserData', async () => {
+export const fetchUserData : any = createAsyncThunk('user/fetchUserData', async () => {
   const res = await getUserDetails();
   return res;
 });
 
 
-export const fetchUserModules = createAsyncThunk('user/fetchUserModules', async () => {
+export const fetchUserModules : any = createAsyncThunk('user/fetchUserModules', async () => {
   const res = await getModules();
   return res || [];
 });
