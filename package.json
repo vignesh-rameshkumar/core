@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "cd desk && yarn install && yarn run dev",
-    "build": "cd desk && yarn install && yarn run build"
+    "dev": "cd erp-desk && yarn install && yarn run dev",
+    "build": "cd erp-desk && yarn install && yarn run build"
   },
   "keywords": [],
   "author": "",
