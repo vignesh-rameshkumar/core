@@ -183,6 +183,10 @@ class LiveSync(Document):
             
     def _handle_insert_or_update(self, doc, event, is_forward=True):
         """Handle document insertion or update"""
+        # Execute before_sync hook if defined
+        if self.config.get("hooks", {}).get("before_sync"):
+            self._execute_hook(self.config["hooks"]["before_sync"], doc, is_forward)
+        
         # Find matching document
         target_doc = self.find_matching_document(doc, is_forward)
         
@@ -193,17 +197,14 @@ class LiveSync(Document):
             field_mappings = {v: k for k, v in field_mappings.items()}
             
         if target_doc:
-            frappe.log_error(
-                f"Updating existing document {target_doc.doctype} {target_doc.name}",
-                "LiveSync Debug"
-            )
-            
             # Update existing document
             target_doc._syncing = True
             
             # Apply field mappings
             for source_field, target_field in field_mappings.items():
                 source_value = doc.get(source_field)
+                # Apply transformation if defined
+                source_value = self._apply_transform(source_field, source_value, doc)
                 target_doc.set(target_field, source_value)
                 
             # Process child tables if configured
@@ -212,6 +213,10 @@ class LiveSync(Document):
             # Save target document
             target_doc.save(ignore_permissions=True)
             
+            # Execute after_sync hook if defined
+            if self.config.get("hooks", {}).get("after_sync"):
+                self._execute_hook(self.config["hooks"]["after_sync"], doc, is_forward, target_doc)
+            
             self._log_sync(doc, target_doc, "update", is_forward)
         else:
             # Create new document
@@ -219,11 +224,6 @@ class LiveSync(Document):
                 target_doctype = self.target_doctype
             else:
                 target_doctype = self.source_doctype
-            
-            frappe.log_error(
-                f"Creating new document in {target_doctype}",
-                "LiveSync Debug"
-            )
                 
             new_doc = frappe.new_doc(target_doctype)
             new_doc._syncing = True
@@ -231,6 +231,8 @@ class LiveSync(Document):
             # Apply field mappings
             for source_field, target_field in field_mappings.items():
                 source_value = doc.get(source_field)
+                # Apply transformation if defined
+                source_value = self._apply_transform(source_field, source_value, doc)
                 new_doc.set(target_field, source_value)
                 
             # Process child tables if configured
@@ -239,7 +241,66 @@ class LiveSync(Document):
             # Insert new document
             new_doc.insert(ignore_permissions=True)
             
+            # Execute after_sync hook if defined
+            if self.config.get("hooks", {}).get("after_sync"):
+                self._execute_hook(self.config["hooks"]["after_sync"], doc, is_forward, new_doc)
+            
             self._log_sync(doc, new_doc, "insert", is_forward)
+
+    def _execute_hook(self, hook_name, source_doc, is_forward, target_doc=None):
+        """Execute a custom hook function"""
+        try:
+            if "." in hook_name:
+                # Module and function specified (e.g., "mymodule.myfunction")
+                module_name, function_name = hook_name.rsplit(".", 1)
+                module = frappe.get_module(module_name)
+                if hasattr(module, function_name):
+                    hook_function = getattr(module, function_name)
+                    if target_doc:
+                        hook_function(source_doc, target_doc, is_forward, self)
+                    else:
+                        hook_function(source_doc, is_forward, self)
+            else:
+                # Global function
+                if frappe.get_attr(hook_name):
+                    hook_function = frappe.get_attr(hook_name)
+                    if target_doc:
+                        hook_function(source_doc, target_doc, is_forward, self)
+                    else:
+                        hook_function(source_doc, is_forward, self)
+        except Exception as e:
+            frappe.log_error(
+                f"Error executing hook {hook_name}: {str(e)}\n{frappe.get_traceback()}",
+                "LiveSync Hook Error"
+            )
+
+    def _apply_transform(self, field_name, value, doc):
+        """Apply transformation to a field value"""
+        transform_config = self.config.get("transform", {})
+        
+        if field_name in transform_config:
+            transform_name = transform_config[field_name]
+            
+            try:
+                if "." in transform_name:
+                    # Module and function specified (e.g., "mymodule.myfunction")
+                    module_name, function_name = transform_name.rsplit(".", 1)
+                    module = frappe.get_module(module_name)
+                    if hasattr(module, function_name):
+                        transform_function = getattr(module, function_name)
+                        return transform_function(value, doc)
+                else:
+                    # Global function
+                    if frappe.get_attr(transform_name):
+                        transform_function = frappe.get_attr(transform_name)
+                        return transform_function(value, doc)
+            except Exception as e:
+                frappe.log_error(
+                    f"Error applying transform {transform_name} to {field_name}: {str(e)}\n{frappe.get_traceback()}",
+                    "LiveSync Transform Error"
+                )
+                
+        return value
                 
     def _handle_delete(self, doc, is_forward=True):
         """Handle document deletion"""
@@ -459,7 +520,7 @@ class LiveSync(Document):
                     "target_field": target_field,
                     "value": source_doc.get(source_field)
                 })
-                
+                    
             # Return test results
             return {
                 "success": True,
@@ -468,7 +529,7 @@ class LiveSync(Document):
                 "target_doc": target_doc.name if target_doc else None,
                 "field_mappings": field_mappings
             }
-                
+                    
         except Exception as e:
             frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
             return {"success": False, "message": str(e)}
@@ -510,3 +571,54 @@ class LiveSync(Document):
         except Exception as e:
             frappe.log_error(f"Manual sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Manual Error")
             return {"success": False, "message": str(e)}
+        
+@frappe.whitelist()
+def run_test_sync(doctype, docname, source_doctype=None, source_name=None):
+    """Bridge function to call instance method"""
+    sync_doc = frappe.get_doc("Live Sync", docname)
+    
+    if not source_doctype:
+        source_doctype = sync_doc.source_doctype
+        
+    if not source_name:
+        # Get a random document
+        docs = frappe.get_all(source_doctype, limit=1)
+        if not docs:
+            return {"success": False, "message": f"No documents found in {source_doctype}"}
+        source_name = docs[0].name
+        
+    try:
+        # Get source document
+        source_doc = frappe.get_doc(source_doctype, source_name)
+        
+        # Check if document matches any target
+        is_forward = (source_doctype == sync_doc.source_doctype)
+        target_doc = sync_doc.find_matching_document(source_doc, is_forward)
+        
+        # Set up field mappings
+        field_mappings = []
+        config_mappings = sync_doc.config.get("direct_fields", {})
+        
+        if not is_forward:
+            # Reverse mappings for backward direction
+            config_mappings = {v: k for k, v in config_mappings.items()}
+            
+        for source_field, target_field in config_mappings.items():
+            field_mappings.append({
+                "source_field": source_field,
+                "target_field": target_field,
+                "value": source_doc.get(source_field)
+            })
+                
+        # Return test results
+        return {
+            "success": True,
+            "source_doc": source_name,
+            "target_exists": bool(target_doc),
+            "target_doc": target_doc.name if target_doc else None,
+            "field_mappings": field_mappings
+        }
+                
+    except Exception as e:
+        frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
+        return {"success": False, "message": str(e)}
