@@ -9,23 +9,20 @@
  "field_order": [
     "sync_configuration",
     "timestamp",
-    "source_doctype",
-    "source_doc",
-    "column_break_1",
-    "target_doctype", 
-    "target_doc",
-    "section_break_1",
     "status",
     "direction",
     "event",
-    "column_break_2",
-    "user",
-    "error_type",
+    "section_break_1",
+    "source_doctype",
+    "source_doc",
+    "column_break_1",
+    "target_doctype",
+    "target_doc",
     "section_break_2",
     "error_message",
-    "details"
+    "user"
   ],
- "fields": [
+  "fields": [
     {
       "fieldname": "sync_configuration",
       "fieldtype": "Link",
@@ -35,43 +32,9 @@
     },
     {
       "fieldname": "timestamp",
-      "fieldtype": "Datetime", 
+      "fieldtype": "Datetime",
       "label": "Timestamp",
       "reqd": 1
-    },
-    {
-      "fieldname": "source_doctype",
-      "fieldtype": "Link",
-      "label": "Source DocType",
-      "options": "DocType",
-      "reqd": 1
-    },
-    {
-      "fieldname": "source_doc",
-      "fieldtype": "Data",
-      "label": "Source Document",
-      "reqd": 1
-    },
-    {
-      "fieldname": "column_break_1", 
-      "fieldtype": "Column Break"
-    },
-    {
-      "fieldname": "target_doctype",
-      "fieldtype": "Link",
-      "label": "Target DocType",
-      "options": "DocType",
-      "reqd": 1
-    },
-    {
-      "fieldname": "target_doc",
-      "fieldtype": "Data",
-      "label": "Target Document"
-    },
-    {
-      "fieldname": "section_break_1",
-      "fieldtype": "Section Break",
-      "label": "Status"
     },
     {
       "fieldname": "status",
@@ -91,41 +54,59 @@
       "fieldname": "event",
       "fieldtype": "Select",
       "label": "Event",
-      "options": "Insert\nUpdate\nDelete",
+      "options": "Insert\nUpdate\nDelete\nArchive",
       "reqd": 1
     },
     {
-      "fieldname": "column_break_2",
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break",
+      "label": "Documents"
+    },
+    {
+      "fieldname": "source_doctype",
+      "fieldtype": "Link",
+      "label": "Source DocType",
+      "options": "DocType",
+      "reqd": 1
+    },
+    {
+      "fieldname": "source_doc",
+      "fieldtype": "Data",
+      "label": "Source Document",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_1",
       "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "target_doctype",
+      "fieldtype": "Link",
+      "label": "Target DocType",
+      "options": "DocType",
+      "reqd": 1
+    },
+    {
+      "fieldname": "target_doc",
+      "fieldtype": "Data",
+      "label": "Target Document"
+    },
+    {
+      "fieldname": "section_break_2",
+      "fieldtype": "Section Break",
+      "label": "Additional Information"
+    },
+    {
+      "fieldname": "error_message",
+      "fieldtype": "Small Text",
+      "label": "Error Message",
+      "depends_on": "eval:doc.status=='Error'"
     },
     {
       "fieldname": "user",
       "fieldtype": "Link",
       "label": "User",
       "options": "User"
-    },
-    {
-      "depends_on": "eval:doc.status=='Error'",
-      "fieldname": "error_type",
-      "fieldtype": "Select",
-      "label": "Error Type",
-      "options": "Validation\nData\nPermission\nSystem\nGeneral"
-    },
-    {
-      "fieldname": "section_break_2",
-      "fieldtype": "Section Break",
-      "label": "Details" 
-    },
-    {
-      "depends_on": "eval:doc.status=='Error'",
-      "fieldname": "error_message",
-      "fieldtype": "Small Text",
-      "label": "Error Message"
-    },
-    {
-      "fieldname": "details",
-      "fieldtype": "JSON",
-      "label": "Details"
     }
   ],
  "index_web_pages_for_search": 1,
