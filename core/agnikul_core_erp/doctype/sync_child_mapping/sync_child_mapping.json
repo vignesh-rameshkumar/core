@@ -1,0 +1,68 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-04-21 23:42:39.552744",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_table",
+  "target_table",
+  "column_break_1",
+  "mapping_type",
+  "section_break_1",
+  "field_mappings"
+ ],
+ "fields": [
+  {
+   "description": "Name of the child table field in source doctype",
+   "fieldname": "source_table",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source Table Field",
+   "reqd": 1
+  },
+  {
+   "description": "Name of the child table field in target doctype",
+   "fieldname": "target_table",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Target Table Field",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "One to One",
+   "fieldname": "mapping_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Mapping Type",
+   "options": "One to One\nFilter and Map"
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "Field Mappings"
+  },
+  {
+   "fieldname": "field_mappings",
+   "fieldtype": "Table",
+   "label": "Field Mappings",
+   "options": "Sync Field Mapping"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2025-04-22 00:20:27.690864",
+ "modified_by": "Administrator",
+ "module": "Agnikul Core ERP",
+ "name": "Sync Child Mapping",
+ "owner": "Administrator",
+ "permissions": [],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

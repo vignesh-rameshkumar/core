@@ -1,0 +1,155 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2025-04-21 23:44:20.816075",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+    "sync_configuration",
+    "timestamp",
+    "source_doctype",
+    "source_doc",
+    "column_break_1",
+    "target_doctype", 
+    "target_doc",
+    "section_break_1",
+    "status",
+    "direction",
+    "event",
+    "column_break_2",
+    "user",
+    "error_type",
+    "section_break_2",
+    "error_message",
+    "details"
+  ],
+ "fields": [
+    {
+      "fieldname": "sync_configuration",
+      "fieldtype": "Link",
+      "label": "Sync Configuration",
+      "options": "Live Sync",
+      "reqd": 1
+    },
+    {
+      "fieldname": "timestamp",
+      "fieldtype": "Datetime", 
+      "label": "Timestamp",
+      "reqd": 1
+    },
+    {
+      "fieldname": "source_doctype",
+      "fieldtype": "Link",
+      "label": "Source DocType",
+      "options": "DocType",
+      "reqd": 1
+    },
+    {
+      "fieldname": "source_doc",
+      "fieldtype": "Data",
+      "label": "Source Document",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_1", 
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "target_doctype",
+      "fieldtype": "Link",
+      "label": "Target DocType",
+      "options": "DocType",
+      "reqd": 1
+    },
+    {
+      "fieldname": "target_doc",
+      "fieldtype": "Data",
+      "label": "Target Document"
+    },
+    {
+      "fieldname": "section_break_1",
+      "fieldtype": "Section Break",
+      "label": "Status"
+    },
+    {
+      "fieldname": "status",
+      "fieldtype": "Select",
+      "label": "Status",
+      "options": "Success\nError\nSkipped",
+      "reqd": 1
+    },
+    {
+      "fieldname": "direction",
+      "fieldtype": "Select",
+      "label": "Direction",
+      "options": "Forward\nBackward",
+      "reqd": 1
+    },
+    {
+      "fieldname": "event",
+      "fieldtype": "Select",
+      "label": "Event",
+      "options": "Insert\nUpdate\nDelete",
+      "reqd": 1
+    },
+    {
+      "fieldname": "column_break_2",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "user",
+      "fieldtype": "Link",
+      "label": "User",
+      "options": "User"
+    },
+    {
+      "depends_on": "eval:doc.status=='Error'",
+      "fieldname": "error_type",
+      "fieldtype": "Select",
+      "label": "Error Type",
+      "options": "Validation\nData\nPermission\nSystem\nGeneral"
+    },
+    {
+      "fieldname": "section_break_2",
+      "fieldtype": "Section Break",
+      "label": "Details" 
+    },
+    {
+      "depends_on": "eval:doc.status=='Error'",
+      "fieldname": "error_message",
+      "fieldtype": "Small Text",
+      "label": "Error Message"
+    },
+    {
+      "fieldname": "details",
+      "fieldtype": "JSON",
+      "label": "Details"
+    }
+  ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-04-21 23:44:20.816075",
+ "modified_by": "Administrator",
+ "module": "Agnikul Core ERP",
+ "name": "Sync Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
