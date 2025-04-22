@@ -11,24 +11,29 @@ frappe.ui.form.on('Live Sync', {
             }, null, 4));
         }
         
-        // Add configuration help
+        // Update the configuration help text in live_sync.js
         frm.set_df_property('config', 'description', 
             `<div class="text-muted">
                 <p><strong>Example configuration:</strong></p>
                 <pre>{
-  "direct_fields": {
-    "source_field1": "target_field1",
-    "source_field2": "target_field2"
-  },
-  "child_mappings": [
-    {
-      "source_table": "source_child_table",
-      "source_field": "source_field",
-      "target_table": "target_child_table",
-      "target_field": "target_field"
-    }
-  ]
-}</pre>
+        "direct_fields": {
+            "source_field1": "target_field1",
+            "source_field2": "target_field2"
+        },
+        "child_mappings": [
+            {
+            "source_table": "child_table_name",
+            "target_table": "target_child_table",
+            "fields": {
+                "source_field1": "target_field1",
+                "source_field2": "target_field2"
+            },
+            "key_field": "id"  // Optional: field to match existing rows
+            }
+        ]
+        }</pre>
+                <p><em>The "key_field" is optional - if provided, it will be used to match and update existing rows
+                instead of replacing all rows.</em></p>
             </div>`
         );
         
@@ -107,7 +112,6 @@ frappe.ui.form.on('Live Sync', {
             }, __('Test Sync'), __('Test'));
         }, __('Actions'));
         
-        // Add trigger sync button
         frm.add_custom_button(__('Trigger Sync'), function() {
             frappe.prompt([
                 {
@@ -127,6 +131,7 @@ frappe.ui.form.on('Live Sync', {
             ], function(values) {
                 frm.call({
                     method: 'trigger_sync_for_document',
+                    doc: frm.doc,
                     args: {
                         doctype: values.doctype,
                         docname: values.docname
@@ -142,7 +147,7 @@ frappe.ui.form.on('Live Sync', {
                             frappe.msgprint({
                                 title: __('Error'),
                                 indicator: 'red',
-                                message: r.message.message || __('An error occurred during sync')
+                                message: r.message ? r.message.message : __('An error occurred during sync')
                             });
                         }
                     }

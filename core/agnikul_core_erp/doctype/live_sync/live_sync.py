@@ -155,7 +155,13 @@ class LiveSync(Document):
         # Make sure doc is from the correct doctype
         if doc.doctype != source_doctype:
             return
-            
+                
+        # Debug log
+        frappe.log_error(
+            f"Syncing {doc.doctype} {doc.name}, child tables: {[table for table in doc.__dict__ if isinstance(doc.get(table), list) and len(doc.get(table)) > 0]}",
+            "LiveSync Debug"
+        )
+        
         # Mark document as being synced to prevent loops
         doc._syncing = True
         
@@ -187,6 +193,11 @@ class LiveSync(Document):
             field_mappings = {v: k for k, v in field_mappings.items()}
             
         if target_doc:
+            frappe.log_error(
+                f"Updating existing document {target_doc.doctype} {target_doc.name}",
+                "LiveSync Debug"
+            )
+            
             # Update existing document
             target_doc._syncing = True
             
@@ -208,6 +219,11 @@ class LiveSync(Document):
                 target_doctype = self.target_doctype
             else:
                 target_doctype = self.source_doctype
+            
+            frappe.log_error(
+                f"Creating new document in {target_doctype}",
+                "LiveSync Debug"
+            )
                 
             new_doc = frappe.new_doc(target_doctype)
             new_doc._syncing = True
@@ -224,7 +240,7 @@ class LiveSync(Document):
             new_doc.insert(ignore_permissions=True)
             
             self._log_sync(doc, new_doc, "insert", is_forward)
-            
+                
     def _handle_delete(self, doc, is_forward=True):
         """Handle document deletion"""
         # Get delete action from configuration
@@ -264,34 +280,128 @@ class LiveSync(Document):
             return
             
         for mapping in child_mappings:
-            # Get table and field information based on direction
+            # Get table information based on direction
             if is_forward:
                 source_table = mapping.get("source_table")
-                source_field = mapping.get("source_field")
                 target_table = mapping.get("target_table")
-                target_field = mapping.get("target_field")
+                fields = mapping.get("fields", {})
             else:
-                source_table = mapping.get("target_table")
-                source_field = mapping.get("target_field")
+                source_table = mapping.get("target_table") 
                 target_table = mapping.get("source_table")
-                target_field = mapping.get("source_field")
+                # Invert the field mappings
+                fields = {v: k for k, v in mapping.get("fields", {}).items()}
                 
-            # Skip if fields are not defined
-            if not all([source_table, source_field, target_table, target_field]):
+            # Skip if required fields are missing
+            if not source_table or not target_table or not fields:
+                frappe.log_error(
+                    f"Missing required fields in child mapping: {mapping}",
+                    "LiveSync Error"
+                )
+                continue
+                
+            # Check if source table exists in source document
+            if not hasattr(source_doc, source_table):
+                frappe.log_error(
+                    f"Source document {source_doc.doctype} {source_doc.name} doesn't have child table '{source_table}'",
+                    "LiveSync Error"
+                )
                 continue
                 
             # Get source rows
             source_rows = source_doc.get(source_table, [])
             
-            # Create new target rows
+            # Get target child table doctype
+            try:
+                child_doctype = frappe.get_meta(target_doc.doctype).get_field(target_table).options
+            except Exception as e:
+                frappe.log_error(
+                    f"Error getting child table doctype: {str(e)}",
+                    "LiveSync Error"
+                )
+                continue
+                
+            # Create target rows
             target_rows = []
             for source_row in source_rows:
-                target_row = {"doctype": frappe.get_meta(target_doc.doctype).get_field(target_table).options}
-                target_row[target_field] = source_row.get(source_field)
-                target_rows.append(target_row)
+                # Create a new row
+                row_dict = {"doctype": child_doctype}
                 
-            # Set target rows
-            target_doc.set(target_table, target_rows)
+                # Map fields
+                for src_field, tgt_field in fields.items():
+                    if hasattr(source_row, src_field):
+                        row_dict[tgt_field] = source_row.get(src_field)
+                    else:
+                        # Try dict access if attribute access fails
+                        try:
+                            row_dict[tgt_field] = source_row[src_field]
+                        except (KeyError, TypeError):
+                            frappe.log_error(
+                                f"Source field {src_field} not found in row of {source_table}",
+                                "LiveSync Error"
+                            )
+                
+                # Add the row
+                target_rows.append(row_dict)
+            
+            # Remove all existing rows and add new ones
+            target_doc.set(target_table, [])
+            
+            # Add the new rows
+            for row in target_rows:
+                target_doc.append(target_table, row)
+            
+            frappe.log_error(
+                f"Processed {len(source_rows)} rows from {source_table} to {target_table}",
+                "LiveSync Debug"
+            )
+                
+    def _update_child_rows(self, source_rows, target_doc, target_table, target_doctype, 
+                        field_mappings, key_field, source_key_field):
+        """Update child rows based on key field"""
+        # Get existing target rows
+        existing_rows = {row.get(key_field): row for row in target_doc.get(target_table, [])}
+        new_rows = []
+        
+        for source_row in source_rows:
+            source_key_value = source_row.get(source_key_field)
+            if not source_key_value:
+                continue
+                
+            if source_key_value in existing_rows:
+                # Update existing row
+                target_row = existing_rows[source_key_value]
+                for source_field, target_field in field_mappings.items():
+                    if hasattr(source_row, source_field):
+                        target_row.set(target_field, source_row.get(source_field))
+                new_rows.append(target_row)
+            else:
+                # Create new row
+                target_row = frappe.new_doc(target_doctype)
+                target_row.doctype = target_doctype
+                for source_field, target_field in field_mappings.items():
+                    if hasattr(source_row, source_field):
+                        target_row.set(target_field, source_row.get(source_field))
+                new_rows.append(target_row)
+                
+        # Update the target document with the updated/new rows
+        target_doc.set(target_table, new_rows)
+            
+    def _replace_child_rows(self, source_rows, target_doc, target_table, target_doctype, field_mappings):
+        """Replace all child rows"""
+        new_rows = []
+        
+        for source_row in source_rows:
+            target_row = frappe.new_doc(target_doctype)
+            target_row.doctype = target_doctype
+            
+            for source_field, target_field in field_mappings.items():
+                if hasattr(source_row, source_field):
+                    target_row.set(target_field, source_row.get(source_field))
+                    
+            new_rows.append(target_row)
+            
+        # Replace all rows in the target document
+        target_doc.set(target_table, new_rows)
             
     def _log_sync(self, source_doc, target_doc, action, is_forward):
         """Log synchronization action"""
@@ -367,8 +477,14 @@ class LiveSync(Document):
     def trigger_sync_for_document(self, doctype, docname):
         """Manually trigger sync for a document"""
         try:
-            # Get document
+            # Load the document with full details including child tables
             doc = frappe.get_doc(doctype, docname)
+            
+            # Log initial state
+            frappe.log_error(
+                f"Triggering sync for {doctype} {docname}, child tables: {[table for table in doc.__dict__ if isinstance(doc.get(table), list) and len(doc.get(table)) > 0]}",
+                "LiveSync Debug"
+            )
             
             # Determine direction
             is_forward = (doctype == self.source_doctype)
@@ -376,9 +492,20 @@ class LiveSync(Document):
             # Process sync
             self.sync_document(doc, "on_update", is_forward)
             
+            # Get target doc info for confirmation
+            target_info = ""
+            if is_forward:
+                target_doctype = self.target_doctype
+            else:
+                target_doctype = self.source_doctype
+                
+            target_doc = self.find_matching_document(doc, is_forward)
+            if target_doc:
+                target_info = f" - Updated {target_doctype} {target_doc.name}"
+            
             return {
                 "success": True,
-                "message": f"Sync triggered for {doctype} {docname}"
+                "message": f"Sync triggered for {doctype} {docname}{target_info}"
             }
         except Exception as e:
             frappe.log_error(f"Manual sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Manual Error")
