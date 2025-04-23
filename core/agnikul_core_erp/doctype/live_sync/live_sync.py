@@ -251,13 +251,14 @@ class LiveSync(Document):
             # Update existing document
             target_doc._syncing = True
             
-            # Apply field mappings including parent-child mappings
+            # First process hierarchical field mappings to ensure they happen before any
+            # potential child table replacements
             self._process_field_mappings(doc, target_doc, is_forward)
-                
-            # Process child tables using traditional mappings
+            
+            # Then process traditional child table mappings (only if there are specific child_mappings)
             if self.config.get("child_mappings"):
                 self._process_child_tables(doc, target_doc, is_forward)
-                
+            
             # Save target document
             target_doc.save(ignore_permissions=True)
             
@@ -268,21 +269,17 @@ class LiveSync(Document):
             self._log_sync(doc, target_doc, "update", is_forward)
         else:
             # Create new document
-            if is_forward:
-                target_doctype = self.target_doctype
-            else:
-                target_doctype = self.source_doctype
-                
+            target_doctype = self.target_doctype if is_forward else self.source_doctype
             new_doc = frappe.new_doc(target_doctype)
             new_doc._syncing = True
             
-            # Apply field mappings including parent-child mappings
+            # Process field mappings
             self._process_field_mappings(doc, new_doc, is_forward)
             
-            # Process child tables using traditional mappings
+            # Process traditional child table mappings
             if self.config.get("child_mappings"):
                 self._process_child_tables(doc, new_doc, is_forward)
-                
+            
             # Insert new document
             new_doc.insert(ignore_permissions=True)
             
@@ -783,12 +780,103 @@ class LiveSync(Document):
         
         # Process regular field mappings
         field_mappings = self.config.get("direct_fields", {})
+        
+        # First pass: Process regular field to regular field and child to parent mappings
         for src_field, tgt_field in field_mappings.items():
+            # Skip parent to child mappings for now
+            if is_forward and "." in tgt_field and "." not in src_field:
+                continue
+            if not is_forward and "." in src_field and "." not in tgt_field:
+                continue
+                
             if is_forward:
                 self._map_single_field(source_doc, target_doc, src_field, tgt_field)
             else:
                 # For reverse direction, swap source and target
                 self._map_single_field(source_doc, target_doc, tgt_field, src_field)
+        
+        # Second pass: Process only parent to child mappings
+        # This ensures child tables are fully populated before we try to update specific fields
+        for src_field, tgt_field in field_mappings.items():
+            # Only handle parent to child mappings now
+            if is_forward and "." in tgt_field and "." not in src_field:
+                self._map_parent_to_child_field(source_doc, target_doc, src_field, tgt_field)
+            elif not is_forward and "." in src_field and "." not in tgt_field:
+                self._map_parent_to_child_field(source_doc, target_doc, tgt_field, src_field)
+
+    def _map_parent_to_child_field(self, source_doc, target_doc, parent_field, child_field_path):
+        """Special handling for mapping parent field to child field using direct DB update"""
+        # Get parent field value
+        parent_value = source_doc.get(parent_field)
+        if parent_value is None:
+            return  # Skip if no value
+            
+        # Parse the child field path
+        path_info = self._parse_table_reference(child_field_path)
+        table_name = path_info["table"]
+        field_name = path_info["field"]
+        index = path_info["index"]
+        
+        # Make sure the child table exists
+        meta = frappe.get_meta(target_doc.doctype)
+        table_field = meta.get_field(table_name)
+        if not table_field:
+            frappe.log_error(f"Table field {table_name} not found in {target_doc.doctype}", "Hierarchical Field Error")
+            return
+
+        # Get the child doctype
+        child_doctype = table_field.options
+        
+        # Get current child table
+        child_table = target_doc.get(table_name, [])
+        
+        # Skip the normal update process and use direct DB updates instead
+        # This avoids the issues with child table handling in the document model
+        
+        # 1. Make sure target_doc is saved first
+        if target_doc.is_new():
+            target_doc.insert(ignore_permissions=True)
+        
+        # 2. Find or create the child row
+        child_row = None
+        if index is not None:
+            # Specific index requested
+            if len(child_table) > index:
+                # Row exists, use it
+                child_row = child_table[index]
+            else:
+                # Need to create new rows up to the index
+                for i in range(len(child_table), index + 1):
+                    new_row = frappe.new_doc(child_doctype)
+                    new_row.parent = target_doc.name
+                    new_row.parenttype = target_doc.doctype
+                    new_row.parentfield = table_name
+                    new_row.insert(ignore_permissions=True)
+                    
+                    if i == index:
+                        child_row = new_row
+        else:
+            # No index, use first row or create one
+            if child_table:
+                child_row = child_table[0]
+            else:
+                # Create first row
+                child_row = frappe.new_doc(child_doctype)
+                child_row.parent = target_doc.name
+                child_row.parenttype = target_doc.doctype
+                child_row.parentfield = table_name
+                child_row.insert(ignore_permissions=True)
+        
+        # 3. Now update just the specific field using frappe.db.set_value
+        if child_row and child_row.name:
+            frappe.db.set_value(child_doctype, child_row.name, field_name, parent_value)
+            frappe.log_error(
+                f"Direct DB update: {child_doctype} {child_row.name}.{field_name} = {parent_value}",
+                "Parent to Child Update"
+            )
+            
+            # 4. Refresh the target document to see the changes
+            target_doc.reload()
 
     def _map_single_field(self, source_doc, target_doc, source_field, target_field):
         """Map a single field from source to target, handling hierarchical fields"""
@@ -815,11 +903,11 @@ class LiveSync(Document):
 
     def _get_hierarchical_field_value(self, doc, field_path):
         """Get value from a hierarchical field path, supporting indexes"""
-        # Parse the field path to handle indexes
-        table_info = self._parse_table_reference(field_path)
-        table_name = table_info["table"]
-        field_name = table_info["field"]
-        index = table_info["index"]
+        # Parse the field path
+        path_info = self._parse_table_reference(field_path)
+        table_name = path_info["table"]
+        field_name = path_info["field"]
+        index = path_info["index"]
         
         # Get the child table
         child_table = doc.get(table_name, [])
@@ -839,52 +927,55 @@ class LiveSync(Document):
 
     def _set_hierarchical_field_value(self, doc, field_path, value):
         """Set value in a hierarchical field path, supporting indexes"""
-        # Parse the field path to handle indexes
-        table_info = self._parse_table_reference(field_path)
-        table_name = table_info["table"]
-        field_name = table_info["field"]
-        index = table_info["index"]
+        # Parse the field path
+        path_info = self._parse_table_reference(field_path)
+        table_name = path_info["table"]
+        field_name = path_info["field"]
+        index = path_info["index"]
         
-        # Make sure the table exists
-        if not hasattr(doc, table_name):
-            # Get the child doctype for this table
-            child_doctype = None
-            try:
-                child_doctype = frappe.get_meta(doc.doctype).get_field(table_name).options
-            except Exception:
-                frappe.log_error(f"Could not determine child doctype for {table_name} in {doc.doctype}")
-                return
-            
-            # Initialize an empty table
-            doc.set(table_name, [])
+        # Make sure the table field exists in the doctype
+        meta = frappe.get_meta(doc.doctype)
+        table_field = meta.get_field(table_name)
+        if not table_field:
+            frappe.log_error(f"Table field {table_name} not found in {doc.doctype}", "Hierarchical Field Error")
+            return
+
+        # Get the child doctype
+        child_doctype = table_field.options
         
-        # Get the child table
+        # Get existing child table (important to work with the actual table, not a copy)
         child_table = doc.get(table_name, [])
         
-        # Prepare the row
+        # Determine which row to update or create
         if index is not None:
             # Specific index requested
             while len(child_table) <= index:
-                # Add rows until we reach the desired index
-                child_doctype = frappe.get_meta(doc.doctype).get_field(table_name).options
-                child_table.append(frappe.new_doc(child_doctype))
+                # Create new rows until we reach the desired index
+                new_row = frappe.new_doc(child_doctype)
+                child_table.append(new_row)
             
-            # Set the value
+            # Update the specified row
             child_table[index].set(field_name, value)
         else:
-            # No index, use first row or create one
+            # No index specified, use first row or create one
             if not child_table:
-                # Create a row
-                child_doctype = frappe.get_meta(doc.doctype).get_field(table_name).options
-                row = frappe.new_doc(child_doctype)
-                row.set(field_name, value)
-                child_table.append(row)
+                # Create first row if table is empty
+                new_row = frappe.new_doc(child_doctype)
+                new_row.set(field_name, value)
+                child_table.append(new_row)
             else:
-                # Use existing first row
+                # Update existing first row
                 child_table[0].set(field_name, value)
         
-        # Update the table
+        # Important: Don't use set() for the entire table as it can cause issues
+        # Instead, make sure the internal reference is updated correctly
         doc.set(table_name, child_table)
+        
+        # Log for debugging
+        frappe.log_error(
+            f"Updated {doc.doctype} {doc.name}: Set {field_path} to {value}",
+            "Hierarchical Field Update"
+        )
 
     def _parse_table_reference(self, field_path):
         """Parse a field path with potential index, like "details[0].field1" or "details.field1" """
@@ -893,7 +984,7 @@ class LiveSync(Document):
         # Split into table part and field part
         parts = field_path.split(".")
         if len(parts) != 2:
-            frappe.log_error(f"Invalid field path: {field_path}")
+            frappe.log_error(f"Invalid field path: {field_path}", "Parse Error")
             return {"table": field_path, "field": "", "index": None}
         
         table_part = parts[0]
