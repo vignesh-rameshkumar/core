@@ -40,14 +40,51 @@ class LiveSync(Document):
         # Ensure we have at least one field mapping
         if not self.config["direct_fields"]:
             frappe.throw("At least one field mapping is required in direct_fields")
-            
+                
         # Check field existence in doctypes
         for source_field, target_field in self.config["direct_fields"].items():
-            if not frappe.get_meta(self.source_doctype).has_field(source_field):
-                frappe.throw(f"Source field '{source_field}' does not exist in {self.source_doctype}")
+            # Validate source field
+            self._validate_field_exists(self.source_doctype, source_field, "Source")
                 
-            if not frappe.get_meta(self.target_doctype).has_field(target_field):
-                frappe.throw(f"Target field '{target_field}' does not exist in {self.target_doctype}")
+            # Validate target field
+            self._validate_field_exists(self.target_doctype, target_field, "Target")
+            
+    def _validate_field_exists(self, doctype, field_path, field_type):
+        """Validate that a field exists in the doctype, handling child tables"""
+        # Check if this is a child table field
+        if "." in field_path:
+            # Parse the field path
+            parts = field_path.split(".")
+            table_part = parts[0]
+            field_name = parts[1]
+            
+            # Remove index if present in table part
+            if "[" in table_part and "]" in table_part:
+                import re
+                match = re.match(r'(.+)\[\d+\]', table_part)
+                if match:
+                    table_part = match.group(1)
+                    
+            # Check if the table field exists in the parent doctype
+            meta = frappe.get_meta(doctype)
+            table_field = meta.get_field(table_part)
+            
+            if not table_field:
+                frappe.throw(f"{field_type} table '{table_part}' does not exist in {doctype}")
+                
+            if table_field.fieldtype != "Table":
+                frappe.throw(f"{field_type} field '{table_part}' in {doctype} is not a Table field")
+                
+            # Now check if the field exists in the child table doctype
+            child_doctype = table_field.options
+            child_meta = frappe.get_meta(child_doctype)
+            
+            if not child_meta.has_field(field_name):
+                frappe.throw(f"{field_type} field '{field_name}' does not exist in child table {child_doctype}")
+        else:
+            # Regular field check
+            if not frappe.get_meta(doctype).has_field(field_path):
+                frappe.throw(f"{field_type} field '{field_path}' does not exist in {doctype}")
                 
     def check_bidirectional_conflicts(self):
         """Prevent infinite loops with bidirectional syncs"""
@@ -87,49 +124,69 @@ class LiveSync(Document):
         if self.bidirectional:
             frappe.cache().delete_value(f"sync_configs_for_{self.target_doctype}")
             
-    def find_matching_document(self, doc, is_forward=True):
-        """Find matching document in target doctype"""
+    def find_matching_document(self, source_doc, is_forward=True):
+        """
+        Find matching document in target doctype based on identifier mapping
+        
+        Args:
+            source_doc: The source document to find a match for
+            is_forward: Direction of sync (True for source→target, False for target→source)
+            
+        Returns:
+            The matching document or None if no match is found
+        """
+        # Determine source and target doctypes based on direction
         if is_forward:
-            source_doc = doc
             source_doctype = self.source_doctype
             target_doctype = self.target_doctype
         else:
-            source_doc = doc
             source_doctype = self.target_doctype
             target_doctype = self.source_doctype
         
-        # Get the first field mapping to use as identifier
-        field_mappings = self.config.get("direct_fields", {})
-        if not field_mappings:
-            return None
-            
-        # Use the first field mapping as identifier
-        source_field, target_field = next(iter(field_mappings.items()))
+        # Get identifier mapping or use first field mapping if not specified
+        identifier_mapping = self.config.get("identifier_mapping", {})
+        if not identifier_mapping:
+            # If no identifier mapping is specified, use the first field mapping
+            field_mappings = self.config.get("direct_fields", {})
+            if field_mappings:
+                first_src, first_tgt = next(iter(field_mappings.items()))
+                identifier_mapping = {first_src: first_tgt}
         
-        if not is_forward:
-            # Swap fields for backward direction
-            source_field, target_field = target_field, source_field
+        # Try each identifier mapping
+        for src_field, tgt_field in identifier_mapping.items():
+            # Adjust fields based on direction
+            if is_forward:
+                source_field, target_field = src_field, tgt_field
+            else:
+                source_field, target_field = tgt_field, src_field
             
-        # Get value from source doc
-        source_value = source_doc.get(source_field)
-        if not source_value:
-            return None
+            # Get source value
+            source_value = None
+            if "." in source_field:
+                source_value = self._get_hierarchical_field_value(source_doc, source_field)
+            else:
+                source_value = source_doc.get(source_field)
             
-        # Find matching document
-        try:
-            target_docs = frappe.get_all(
-                target_doctype, 
-                filters={target_field: source_value},
-                fields=["name"]
-            )
+            # Skip if no value
+            if source_value is None:
+                continue
             
-            if target_docs:
-                return frappe.get_doc(target_doctype, target_docs[0].name)
-        except Exception as e:
-            frappe.log_error(f"Error finding matching document: {str(e)}", "LiveSync Error")
-            
+            # Query for matching document
+            if "." not in target_field:  # Can only query non-hierarchical fields directly
+                filters = {target_field: source_value}
+                target_docs = frappe.get_all(
+                    target_doctype,
+                    filters=filters,
+                    fields=["name"],
+                    limit=1
+                )
+                
+                if target_docs:
+                    return frappe.get_doc(target_doctype, target_docs[0].name)
+        
+        # No match found
         return None
-        
+            
     def sync_document(self, doc, event, is_forward=True):
         """Sync document based on event type"""
         # Skip if document is already being synced
@@ -190,25 +247,16 @@ class LiveSync(Document):
         # Find matching document
         target_doc = self.find_matching_document(doc, is_forward)
         
-        # Set up source and target field mappings
-        field_mappings = self.config.get("direct_fields", {})
-        if not is_forward:
-            # Reverse mappings for backward direction
-            field_mappings = {v: k for k, v in field_mappings.items()}
-            
         if target_doc:
             # Update existing document
             target_doc._syncing = True
             
-            # Apply field mappings
-            for source_field, target_field in field_mappings.items():
-                source_value = doc.get(source_field)
-                # Apply transformation if defined
-                source_value = self._apply_transform(source_field, source_value, doc)
-                target_doc.set(target_field, source_value)
+            # Apply field mappings including parent-child mappings
+            self._process_field_mappings(doc, target_doc, is_forward)
                 
-            # Process child tables if configured
-            self._process_child_tables(doc, target_doc, is_forward)
+            # Process child tables using traditional mappings
+            if self.config.get("child_mappings"):
+                self._process_child_tables(doc, target_doc, is_forward)
                 
             # Save target document
             target_doc.save(ignore_permissions=True)
@@ -228,15 +276,12 @@ class LiveSync(Document):
             new_doc = frappe.new_doc(target_doctype)
             new_doc._syncing = True
             
-            # Apply field mappings
-            for source_field, target_field in field_mappings.items():
-                source_value = doc.get(source_field)
-                # Apply transformation if defined
-                source_value = self._apply_transform(source_field, source_value, doc)
-                new_doc.set(target_field, source_value)
-                
-            # Process child tables if configured
-            self._process_child_tables(doc, new_doc, is_forward)
+            # Apply field mappings including parent-child mappings
+            self._process_field_mappings(doc, new_doc, is_forward)
+            
+            # Process child tables using traditional mappings
+            if self.config.get("child_mappings"):
+                self._process_child_tables(doc, new_doc, is_forward)
                 
             # Insert new document
             new_doc.insert(ignore_permissions=True)
@@ -722,7 +767,277 @@ class LiveSync(Document):
                 }
         except Exception as e:
             frappe.log_error(f"Bulk sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Bulk Error")
-            return {"success": False, "message": str(e)}
+            return {"success": False, "message": str(e)}        
+
+    def _process_field_mappings(self, source_doc, target_doc, is_forward=True):
+        """Process all field mappings with special handling for hierarchical fields"""
+        # Process identifier mapping first if available
+        identifier_mapping = self.config.get("identifier_mapping", {})
+        if identifier_mapping:
+            for src_field, tgt_field in identifier_mapping.items():
+                if is_forward:
+                    self._map_single_field(source_doc, target_doc, src_field, tgt_field)
+                else:
+                    # For reverse direction, swap source and target
+                    self._map_single_field(source_doc, target_doc, tgt_field, src_field)
+        
+        # Process regular field mappings
+        field_mappings = self.config.get("direct_fields", {})
+        for src_field, tgt_field in field_mappings.items():
+            if is_forward:
+                self._map_single_field(source_doc, target_doc, src_field, tgt_field)
+            else:
+                # For reverse direction, swap source and target
+                self._map_single_field(source_doc, target_doc, tgt_field, src_field)
+
+    def _map_single_field(self, source_doc, target_doc, source_field, target_field):
+        """Map a single field from source to target, handling hierarchical fields"""
+        # Get source value
+        source_value = None
+        
+        if "." in source_field:
+            # This is a hierarchical field
+            source_value = self._get_hierarchical_field_value(source_doc, source_field)
+        else:
+            # Standard field
+            source_value = source_doc.get(source_field)
+        
+        # Only proceed if we have a non-None source value
+        # This prevents clearing target fields when source is None
+        if source_value is not None:
+            # Set target value
+            if "." in target_field:
+                # This is a hierarchical field
+                self._set_hierarchical_field_value(target_doc, target_field, source_value)
+            else:
+                # Standard field
+                target_doc.set(target_field, source_value)
+
+    def _get_hierarchical_field_value(self, doc, field_path):
+        """Get value from a hierarchical field path, supporting indexes"""
+        # Parse the field path to handle indexes
+        table_info = self._parse_table_reference(field_path)
+        table_name = table_info["table"]
+        field_name = table_info["field"]
+        index = table_info["index"]
+        
+        # Get the child table
+        child_table = doc.get(table_name, [])
+        if not child_table:
+            return None
+        
+        # Get the row based on index
+        if index is not None:
+            # Use specific index
+            if len(child_table) > index:
+                return child_table[index].get(field_name)
+            else:
+                return None
+        else:
+            # Use first row by default
+            return child_table[0].get(field_name) if child_table else None
+
+    def _set_hierarchical_field_value(self, doc, field_path, value):
+        """Set value in a hierarchical field path, supporting indexes"""
+        # Parse the field path to handle indexes
+        table_info = self._parse_table_reference(field_path)
+        table_name = table_info["table"]
+        field_name = table_info["field"]
+        index = table_info["index"]
+        
+        # Make sure the table exists
+        if not hasattr(doc, table_name):
+            # Get the child doctype for this table
+            child_doctype = None
+            try:
+                child_doctype = frappe.get_meta(doc.doctype).get_field(table_name).options
+            except Exception:
+                frappe.log_error(f"Could not determine child doctype for {table_name} in {doc.doctype}")
+                return
+            
+            # Initialize an empty table
+            doc.set(table_name, [])
+        
+        # Get the child table
+        child_table = doc.get(table_name, [])
+        
+        # Prepare the row
+        if index is not None:
+            # Specific index requested
+            while len(child_table) <= index:
+                # Add rows until we reach the desired index
+                child_doctype = frappe.get_meta(doc.doctype).get_field(table_name).options
+                child_table.append(frappe.new_doc(child_doctype))
+            
+            # Set the value
+            child_table[index].set(field_name, value)
+        else:
+            # No index, use first row or create one
+            if not child_table:
+                # Create a row
+                child_doctype = frappe.get_meta(doc.doctype).get_field(table_name).options
+                row = frappe.new_doc(child_doctype)
+                row.set(field_name, value)
+                child_table.append(row)
+            else:
+                # Use existing first row
+                child_table[0].set(field_name, value)
+        
+        # Update the table
+        doc.set(table_name, child_table)
+
+    def _parse_table_reference(self, field_path):
+        """Parse a field path with potential index, like "details[0].field1" or "details.field1" """
+        import re
+        
+        # Split into table part and field part
+        parts = field_path.split(".")
+        if len(parts) != 2:
+            frappe.log_error(f"Invalid field path: {field_path}")
+            return {"table": field_path, "field": "", "index": None}
+        
+        table_part = parts[0]
+        field_part = parts[1]
+        
+        # Check for index notation like "details[0]"
+        index_match = re.match(r'(.+)\[(\d+)\]', table_part)
+        if index_match:
+            table_name = index_match.group(1)
+            index = int(index_match.group(2))
+        else:
+            table_name = table_part
+            index = None
+        
+        return {
+            "table": table_name,
+            "field": field_part,
+            "index": index
+        }
+                        
+    def _process_hierarchical_field_mapping(self, source_doc, target_doc, source_field, target_field):
+        """Process field mappings that involve parent-child relationships"""
+        # Parse source field path
+        source_is_child = "." in source_field
+        target_is_child = "." in target_field
+        
+        # Get source value
+        source_value = None
+        if source_is_child:
+            source_value = self._get_child_field_value(source_doc, source_field)
+        else:
+            # Direct parent field
+            source_value = source_doc.get(source_field)
+        
+        # Skip if no source value
+        if source_value is None:
+            return
+            
+        # Set target value
+        if target_is_child:
+            self._set_child_field_value(target_doc, target_field, source_value)
+        else:
+            # Direct parent field
+            target_doc.set(target_field, source_value)
+            
+    def _parse_field_path(self, field_path):
+        """Parse a field path into table, index, and field components"""
+        # Check if field has an index specified
+        index = None
+        if "[" in field_path and "]" in field_path:
+            # Extract index from something like "table_name[2].field_name"
+            table_part, field_part = field_path.split(".")
+            
+            # Extract index from table part
+            import re
+            match = re.match(r'(.+)\[(\d+)\]', table_part)
+            if match:
+                table_name = match.group(1)
+                index = int(match.group(2))
+            else:
+                table_name = table_part
+        else:
+            # No index specified
+            table_name, field_name = field_path.split(".")
+            
+        return {
+            "table_name": table_name,
+            "field_name": field_name,
+            "index": index
+        }
+        
+    def _get_child_field_value(self, doc, field_path):
+        """Get value from a child table field"""
+        # Parse the field path
+        path_info = self._parse_field_path(field_path)
+        
+        # Get child table
+        child_table = doc.get(path_info["table_name"], [])
+        if not child_table:
+            return None
+        
+        # Check if key field is specified for this child table
+        key_field = None
+        for mapping in self.config.get("child_mappings", []):
+            if mapping.get("source_table") == path_info["table_name"]:
+                key_field = mapping.get("key_field")
+                break
+        
+        # Get the appropriate row
+        child_row = None
+        if path_info["index"] is not None:
+            # Use index if specified
+            if len(child_table) > path_info["index"]:
+                child_row = child_table[path_info["index"]]
+            else:
+                # Index doesn't exist
+                return None
+        elif key_field:
+            # Try to find row by key field
+            # This would need additional logic to match by key
+            # For now we'll just use the first row
+            child_row = child_table[0] if child_table else None
+        else:
+            # Default to first row
+            child_row = child_table[0] if child_table else None
+        
+        # Get the field value from the row
+        if child_row:
+            return child_row.get(path_info["field_name"])
+        
+        return None
+        
+    def _set_child_field_value(self, doc, field_path, value):
+        """Set value in a child table field"""
+        # Parse the field path
+        path_info = self._parse_field_path(field_path)
+        
+        # Get or create child table
+        child_table = doc.get(path_info["table_name"], [])
+        
+        # Check if we can set an existing row or need to create one
+        if path_info["index"] is not None:
+            # Specific index was requested
+            while len(child_table) <= path_info["index"]:
+                # Create enough rows to reach the index
+                child_doctype = frappe.get_meta(doc.doctype).get_field(path_info["table_name"]).options
+                child_table.append(frappe.new_doc(child_doctype))
+            
+            # Set the value in the specified row
+            child_table[path_info["index"]].set(path_info["field_name"], value)
+        else:
+            # No index specified, use first row or create one
+            if not child_table:
+                # Create first row if table is empty
+                child_doctype = frappe.get_meta(doc.doctype).get_field(path_info["table_name"]).options
+                child_row = frappe.new_doc(child_doctype)
+                child_row.set(path_info["field_name"], value)
+                child_table.append(child_row)
+            else:
+                # Use first existing row
+                child_table[0].set(path_info["field_name"], value)
+        
+        # Update the table in the document
+        doc.set(path_info["table_name"], child_table)
         
 @frappe.whitelist()
 def run_test_sync(doctype, docname, source_doctype=None, source_name=None):

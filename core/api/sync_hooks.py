@@ -47,6 +47,9 @@ def store_complete_data(source_doc, is_forward, sync_config):
         
         sync_config._temp_data[source_doc.name] = data
         
+        # Set the same name for target document
+        sync_config._target_name = source_doc.name
+        
         frappe.log_error(
             f"Stored complete data for {source_doc.doctype} {source_doc.name}",
             "Sync Before Hook"
@@ -82,7 +85,31 @@ def update_json_data(source_doc, target_doc, is_forward, sync_config):
         # This ensures the mandatory field requirement is satisfied
         target_doc.user_data = json.dumps(data, default=str)
         
-        # Set as a direct field to bypass validation
+        # Get the target name (should be same as source doc name)
+        target_name = source_doc.name
+        if hasattr(sync_config, "_target_name"):
+            target_name = sync_config._target_name
+        
+        # If the document was just created, rename it to match the source doc
+        if target_doc.name != target_name:
+            try:
+                # Rename the target document 
+                frappe.rename_doc(target_doc.doctype, target_doc.name, target_name, force=True)
+                
+                # Update our reference to the renamed document
+                target_doc = frappe.get_doc(target_doc.doctype, target_name)
+                
+                frappe.log_error(
+                    f"Renamed {target_doc.doctype} from {target_doc.name} to {target_name}",
+                    "Sync After Hook"
+                )
+            except Exception as rename_error:
+                frappe.log_error(
+                    f"Error renaming document: {str(rename_error)}",
+                    "Sync Rename Error"
+                )
+        
+        # Set user_data field directly to bypass validation
         frappe.db.set_value("Demo User", target_doc.name, "user_data", json.dumps(data, default=str))
         
         frappe.log_error(
