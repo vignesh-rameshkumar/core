@@ -506,7 +506,7 @@ class LiveSync(Document):
             is_forward = (source_doctype == self.source_doctype)
             target_doc = self.find_matching_document(source_doc, is_forward)
             
-            # Set up field mappings
+            # Set up direct field mappings
             field_mappings = []
             config_mappings = self.config.get("direct_fields", {})
             
@@ -515,19 +515,78 @@ class LiveSync(Document):
                 config_mappings = {v: k for k, v in config_mappings.items()}
                 
             for source_field, target_field in config_mappings.items():
+                # Get original value
+                source_value = source_doc.get(source_field)
+                
+                # Check if a transformation would be applied
+                transformed_value = source_value
+                transform_info = ""
+                
+                if self.config.get("transform", {}).get(source_field):
+                    transform_function = self.config["transform"][source_field]
+                    transform_info = f"Would apply: {transform_function}"
+                
                 field_mappings.append({
                     "source_field": source_field,
                     "target_field": target_field,
-                    "value": source_doc.get(source_field)
+                    "value": source_value,
+                    "transform": transform_info
                 })
-                    
-            # Return test results
+            
+            # Set up child table mappings
+            child_mappings = []
+            config_child_mappings = self.config.get("child_mappings", [])
+            
+            for mapping in config_child_mappings:
+                if is_forward:
+                    source_table = mapping.get("source_table")
+                    target_table = mapping.get("target_table")
+                    fields = mapping.get("fields", {})
+                else:
+                    # Reverse for backward direction
+                    source_table = mapping.get("target_table")
+                    target_table = mapping.get("source_table")
+                    # Invert the field mappings
+                    fields = {v: k for k, v in mapping.get("fields", {}).items()}
+                
+                # Get source rows
+                source_rows = source_doc.get(source_table, [])
+                row_count = len(source_rows)
+                
+                # Sample data from first row
+                sample_data = {}
+                if row_count > 0:
+                    for src_field, tgt_field in fields.items():
+                        if hasattr(source_rows[0], src_field):
+                            sample_data[src_field] = source_rows[0].get(src_field)
+                
+                child_mappings.append({
+                    "source_table": source_table,
+                    "target_table": target_table,
+                    "row_count": row_count,
+                    "fields": fields,
+                    "sample_data": sample_data
+                })
+            
+            # Check for hooks
+            hooks_info = {}
+            if self.config.get("hooks", {}).get("before_sync"):
+                hooks_info["before_sync"] = self.config["hooks"]["before_sync"]
+            if self.config.get("hooks", {}).get("after_sync"):
+                hooks_info["after_sync"] = self.config["hooks"]["after_sync"]
+            
+            # Return comprehensive test results
             return {
                 "success": True,
                 "source_doc": source_name,
+                "source_doctype": source_doctype,
                 "target_exists": bool(target_doc),
                 "target_doc": target_doc.name if target_doc else None,
-                "field_mappings": field_mappings
+                "target_doctype": self.target_doctype if is_forward else self.source_doctype,
+                "direction": "Forward" if is_forward else "Backward",
+                "field_mappings": field_mappings,
+                "child_mappings": child_mappings,
+                "hooks": hooks_info
             }
                     
         except Exception as e:

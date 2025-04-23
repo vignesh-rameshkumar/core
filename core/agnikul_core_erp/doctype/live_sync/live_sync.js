@@ -1,4 +1,4 @@
-// Copyright (c) 2025, Your Company and contributors
+// Copyright (c) 2025, Agnikul Cosmos and contributors
 // For license information, please see license.txt
 
 frappe.ui.form.on('Live Sync', {
@@ -18,79 +18,170 @@ frappe.ui.form.on('Live Sync', {
         
         // Add test sync button
         frm.add_custom_button(__('Test Sync'), function() {
-            frappe.prompt([
-                {
-                    fieldname: 'doctype',
-                    label: __('DocType'),
-                    fieldtype: 'Select',
-                    options: [frm.doc.source_doctype, frm.doc.target_doctype],
-                    default: frm.doc.source_doctype,
-                    reqd: 1
-                },
-                {
-                    fieldname: 'docname',
-                    label: __('Document Name'),
-                    fieldtype: 'Data',
-                    reqd: 1
-                }
-            ], function(values) {
-              frm.call({
-                method: 'core.agnikul_core_erp.doctype.live_sync.live_sync.run_test_sync',
+          frappe.prompt([
+            {
+                fieldname: 'doctype',
+                label: __('DocType'),
+                fieldtype: 'Select',
+                options: [frm.doc.source_doctype, frm.doc.target_doctype],
+                default: frm.doc.source_doctype,
+                reqd: 1
+            },
+            {
+                fieldname: 'docname',
+                label: __('Document Name'),
+                fieldtype: 'Data',
+                reqd: 1
+            }
+        ], function(values) {
+            frm.call({
+                method: 'test_sync',
+                doc: frm.doc,
                 args: {
-                    doctype: frm.doctype,
-                    docname: frm.docname,
                     source_doctype: values.doctype,
                     source_name: values.docname
                 },
-                    callback: function(r) {
-                        if (r.message && r.message.success) {
-                            // Show test results
-                            var html = '<div>';
-                            html += '<p><strong>' + __('Source Document') + ':</strong> ' + r.message.source_doc + '</p>';
-                            
-                            if (r.message.target_exists) {
-                                html += '<p><strong>' + __('Target Document') + ':</strong> ' + r.message.target_doc + '</p>';
-                                html += '<p class="text-success"><i class="fa fa-check"></i> ' + __('Target document exists, it would be updated') + '</p>';
-                            } else {
-                                html += '<p class="text-warning"><i class="fa fa-info-circle"></i> ' + __('No target document found, a new one would be created') + '</p>';
-                            }
-                            
-                            html += '<h5>' + __('Field Mappings') + '</h5>';
-                            html += '<table class="table table-bordered">';
-                            html += '<thead><tr><th>' + __('Source Field') + '</th><th>' + __('Target Field') + '</th><th>' + __('Value') + '</th></tr></thead>';
-                            html += '<tbody>';
-                            
-                            r.message.field_mappings.forEach(function(mapping) {
-                                html += '<tr>';
-                                html += '<td>' + mapping.source_field + '</td>';
-                                html += '<td>' + mapping.target_field + '</td>';
-                                html += '<td>' + (mapping.value !== null && mapping.value !== undefined ? mapping.value : '') + '</td>';
-                                html += '</tr>';
-                            });
-                            
-                            html += '</tbody></table>';
-                            html += '</div>';
-                            
-                            var d = new frappe.ui.Dialog({
-                                title: __('Test Sync Results'),
-                                fields: [{
-                                    fieldtype: 'HTML',
-                                    fieldname: 'results',
-                                    options: html
-                                }]
-                            });
-                            
-                            d.show();
+                callback: function(r) {
+                    if (r.message && r.message.success) {
+                        // Build a comprehensive HTML report
+                        var html = '<div>';
+                        
+                        // Basic info
+                        html += '<div class="row">';
+                        html += '<div class="col-md-6">';
+                        html += '<p><strong>' + __('Source') + ':</strong> ' + r.message.source_doctype + ' - ' + r.message.source_doc + '</p>';
+                        html += '</div>';
+                        html += '<div class="col-md-6">';
+                        if (r.message.target_exists) {
+                            html += '<p><strong>' + __('Target') + ':</strong> ' + r.message.target_doctype + ' - ' + r.message.target_doc + '</p>';
+                            html += '<p class="text-success"><i class="fa fa-check"></i> ' + __('Target document exists, it would be updated') + '</p>';
                         } else {
-                            frappe.msgprint({
-                                title: __('Error'),
-                                indicator: 'red',
-                                message: r.message.message || __('An error occurred during test')
+                            html += '<p><strong>' + __('Target') + ':</strong> ' + r.message.target_doctype + ' - ' + __('New document would be created') + '</p>';
+                            html += '<p class="text-warning"><i class="fa fa-info-circle"></i> ' + __('No target document found, a new one would be created') + '</p>';
+                        }
+                        html += '</div>';
+                        html += '</div>';
+                        
+                        html += '<hr>';
+                        
+                        // Direct field mappings
+                        html += '<h5>' + __('Field Mappings') + '</h5>';
+                        html += '<table class="table table-bordered">';
+                        html += '<thead><tr>';
+                        html += '<th>' + __('Source Field') + '</th>';
+                        html += '<th>' + __('Target Field') + '</th>';
+                        html += '<th>' + __('Value') + '</th>';
+                        html += '<th>' + __('Transformation') + '</th>';
+                        html += '</tr></thead>';
+                        html += '<tbody>';
+                        
+                        r.message.field_mappings.forEach(function(mapping) {
+                            html += '<tr>';
+                            html += '<td>' + mapping.source_field + '</td>';
+                            html += '<td>' + mapping.target_field + '</td>';
+                            html += '<td>' + (mapping.value !== null && mapping.value !== undefined ? mapping.value : '') + '</td>';
+                            html += '<td>' + (mapping.transform || '') + '</td>';
+                            html += '</tr>';
+                        });
+                        
+                        html += '</tbody></table>';
+                        
+                        // Child table mappings
+                        if (r.message.child_mappings && r.message.child_mappings.length > 0) {
+                            html += '<h5>' + __('Child Table Mappings') + '</h5>';
+                            
+                            r.message.child_mappings.forEach(function(mapping, index) {
+                                html += '<div class="card mb-3">';
+                                html += '<div class="card-header">';
+                                html += '<strong>' + mapping.source_table + '</strong> → <strong>' + mapping.target_table + '</strong>';
+                                html += ' (' + mapping.row_count + ' ' + (mapping.row_count === 1 ? __('row') : __('rows')) + ')';
+                                html += '</div>';
+                                html += '<div class="card-body">';
+                                
+                                // Field mappings in this child table
+                                html += '<table class="table table-sm">';
+                                html += '<thead><tr>';
+                                html += '<th>' + __('Source Field') + '</th>';
+                                html += '<th>' + __('Target Field') + '</th>';
+                                html += '</tr></thead>';
+                                html += '<tbody>';
+                                
+                                Object.entries(mapping.fields).forEach(function([src, tgt]) {
+                                    html += '<tr>';
+                                    html += '<td>' + src + '</td>';
+                                    html += '<td>' + tgt + '</td>';
+                                    html += '</tr>';
+                                });
+                                
+                                html += '</tbody></table>';
+                                
+                                // Sample data if available
+                                if (Object.keys(mapping.sample_data).length > 0) {
+                                    html += '<div class="mt-2">';
+                                    html += '<p><strong>' + __('Sample data from first row') + ':</strong></p>';
+                                    html += '<pre class="small bg-light p-2">' + JSON.stringify(mapping.sample_data, null, 2) + '</pre>';
+                                    html += '</div>';
+                                }
+                                
+                                html += '</div>'; // card-body
+                                html += '</div>'; // card
                             });
                         }
+                        
+                        // Hooks information
+                        if (r.message.hooks && Object.keys(r.message.hooks).length > 0) {
+                            html += '<h5>' + __('Custom Hooks') + '</h5>';
+                            html += '<table class="table table-bordered">';
+                            html += '<thead><tr>';
+                            html += '<th>' + __('Hook Type') + '</th>';
+                            html += '<th>' + __('Function') + '</th>';
+                            html += '</tr></thead>';
+                            html += '<tbody>';
+                            
+                            if (r.message.hooks.before_sync) {
+                                html += '<tr>';
+                                html += '<td>' + __('Before Sync') + '</td>';
+                                html += '<td>' + r.message.hooks.before_sync + '</td>';
+                                html += '</tr>';
+                            }
+                            
+                            if (r.message.hooks.after_sync) {
+                                html += '<tr>';
+                                html += '<td>' + __('After Sync') + '</td>';
+                                html += '<td>' + r.message.hooks.after_sync + '</td>';
+                                html += '</tr>';
+                            }
+                            
+                            html += '</tbody></table>';
+                        }
+                        
+                        html += '</div>'; // main div
+                        
+                        var d = new frappe.ui.Dialog({
+                            title: __('Test Sync Results'),
+                            size: 'large',
+                            fields: [{
+                                fieldtype: 'HTML',
+                                fieldname: 'results',
+                                options: html
+                            }],
+                            primary_action_label: __('Close'),
+                            primary_action: function() {
+                                d.hide();
+                            }
+                        });
+                        
+                        d.show();
+                    } else {
+                        frappe.msgprint({
+                            title: __('Error'),
+                            indicator: 'red',
+                            message: r.message ? r.message.message : __('An error occurred during test')
+                        });
                     }
-                });
-            }, __('Test Sync'), __('Test'));
+                }
+            });
+        }, __('Test Sync'), __('Test'));
         }, __('Actions'));
         
         // Add trigger sync button
