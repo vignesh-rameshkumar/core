@@ -1,5 +1,6 @@
 {
  "actions": [],
+ "autoname": "field:sync_name",
  "creation": "2025-04-21 23:40:58.836950",
  "default_view": "List",
  "doctype": "DocType",
@@ -117,10 +118,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-22 19:19:16.958435",
+ "modified": "2025-04-23 12:28:50.955913",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "Live Sync",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

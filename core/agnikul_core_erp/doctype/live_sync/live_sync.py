@@ -631,6 +631,99 @@ class LiveSync(Document):
             frappe.log_error(f"Manual sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Manual Error")
             return {"success": False, "message": str(e)}
         
+    @frappe.whitelist()
+    def trigger_bulk_sync(self, source_doctype=None, filters=None, limit=100):
+        
+        try:
+            # Default to source doctype if not specified
+            if not source_doctype:
+                source_doctype = self.source_doctype
+                
+            # Determine sync direction
+            is_forward = (source_doctype == self.source_doctype)
+            
+            # Parse filters if provided as string
+            if isinstance(filters, str):
+                filters = json.loads(filters)
+            
+            # Default to empty dict if no filters
+            if not filters:
+                filters = {}
+                
+            # Get documents matching filters
+            docs = frappe.get_all(
+                source_doctype,
+                filters=filters,
+                limit=limit,
+                fields=["name"]
+            )
+            
+            if not docs:
+                return {
+                    "success": False,
+                    "message": f"No documents found matching filters in {source_doctype}"
+                }
+                
+            # For larger sets, use a background job
+            if len(docs) > 10:
+                # Enqueue background job
+                frappe.enqueue(
+                    'core.agnikul_core_erp.doctype.live_sync.live_sync.process_bulk_sync',
+                    queue='long',
+                    timeout=3600,
+                    sync_config=self.name,
+                    source_doctype=source_doctype,
+                    doc_names=[d.name for d in docs],
+                    is_forward=is_forward,
+                    now=False
+                )
+                
+                return {
+                    "success": True,
+                    "message": f"Bulk sync of {len(docs)} documents has been queued as a background job. Check Sync Logs for results."
+                }
+            else:
+                # Process directly for smaller sets
+                results = {
+                    "total": len(docs),
+                    "processed": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "details": []
+                }
+                
+                for doc in docs:
+                    try:
+                        # Get full document
+                        source_doc = frappe.get_doc(source_doctype, doc.name)
+                        
+                        # Process sync
+                        self.sync_document(source_doc, "on_update", is_forward)
+                        
+                        results["succeeded"] += 1
+                        results["details"].append({
+                            "name": doc.name,
+                            "status": "Success"
+                        })
+                    except Exception as e:
+                        results["failed"] += 1
+                        results["details"].append({
+                            "name": doc.name,
+                            "status": "Failed",
+                            "error": str(e)
+                        })
+                    
+                    results["processed"] += 1
+                    
+                return {
+                    "success": True,
+                    "message": f"Processed {results['processed']} documents: {results['succeeded']} succeeded, {results['failed']} failed",
+                    "results": results
+                }
+        except Exception as e:
+            frappe.log_error(f"Bulk sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Bulk Error")
+            return {"success": False, "message": str(e)}
+        
 @frappe.whitelist()
 def run_test_sync(doctype, docname, source_doctype=None, source_name=None):
     """Bridge function to call instance method"""
@@ -681,3 +774,67 @@ def run_test_sync(doctype, docname, source_doctype=None, source_name=None):
     except Exception as e:
         frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
         return {"success": False, "message": str(e)}
+    
+def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward):
+    """
+    Process bulk sync in background
+    
+    Args:
+        sync_config: Name of LiveSync configuration
+        source_doctype: DocType to sync from
+        doc_names: List of document names to sync
+        is_forward: Direction of sync
+    """
+    try:
+        # Get sync configuration
+        sync = frappe.get_doc("Live Sync", sync_config)
+        
+        # Initialize counters
+        total = len(doc_names)
+        processed = 0
+        succeeded = 0
+        failed = 0
+        
+        # Process in batches of 20
+        batch_size = 50
+        
+        for i in range(0, total, batch_size):
+            batch = doc_names[i:i+batch_size]
+            
+            for doc_name in batch:
+                try:
+                    # Get full document
+                    source_doc = frappe.get_doc(source_doctype, doc_name)
+                    
+                    # Process sync
+                    sync.sync_document(source_doc, "on_update", is_forward)
+                    
+                    succeeded += 1
+                except Exception as e:
+                    failed += 1
+                    frappe.log_error(
+                        f"Error syncing {source_doctype} {doc_name}: {str(e)}",
+                        "Bulk Sync Error"
+                    )
+                
+                processed += 1
+                
+                # Update progress every 10 documents
+                if processed % 10 == 0:
+                    frappe.publish_progress(
+                        percent=processed * 100 / total,
+                        title="Bulk Sync",
+                        description=f"Processed {processed} of {total} documents"
+                    )
+            
+            # Commit after each batch
+            frappe.db.commit()
+        
+        # Log final results
+        frappe.log_error(
+            f"Bulk sync completed: {processed} processed, {succeeded} succeeded, {failed} failed",
+            "Bulk Sync Complete"
+        )
+        
+    except Exception as e:
+        frappe.log_error(f"Bulk sync process error: {str(e)}\n{traceback.format_exc()}", "Bulk Sync Error")
