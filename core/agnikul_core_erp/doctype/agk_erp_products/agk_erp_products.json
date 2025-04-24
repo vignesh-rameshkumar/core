@@ -32,8 +32,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Primary Functional Lead",
-   "options": "User",
-   "reqd": 1
+   "options": "User"
   },
   {
    "fieldname": "proxy_fl",
@@ -50,7 +49,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-01 16:22:12.169722",
+ "modified": "2025-04-24 20:08:58.006032",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "AGK_ERP_Products",
