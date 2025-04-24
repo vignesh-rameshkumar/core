@@ -22,8 +22,7 @@ class LiveSync(Document):
         self.check_bidirectional_conflicts()
         
     def validate_config(self):
-        """Ensure configuration is valid"""
-        # Check that required fields exist
+        """Validate configuration against DocType definitions"""
         if not self.source_doctype:
             frappe.throw("Source DocType is required")
             
@@ -36,18 +35,42 @@ class LiveSync(Document):
             
         if "direct_fields" not in self.config:
             self.config["direct_fields"] = {}
-            
-        # Ensure we have at least one field mapping
-        if not self.config["direct_fields"]:
-            frappe.throw("At least one field mapping is required in direct_fields")
-                
-        # Check field existence in doctypes
+        
+        # 1. Validate identifier mappings
+        identifier_mapping = self.config.get("identifier_mapping", {})
+        for source_field, target_field in identifier_mapping.items():
+            self._validate_field_exists(self.source_doctype, source_field, "Source identifier")
+            self._validate_field_exists(self.target_doctype, target_field, "Target identifier")
+        
+        # 2. Validate direct field mappings
         for source_field, target_field in self.config["direct_fields"].items():
-            # Validate source field
             self._validate_field_exists(self.source_doctype, source_field, "Source")
-                
-            # Validate target field
             self._validate_field_exists(self.target_doctype, target_field, "Target")
+        
+        # 3. Validate child mappings
+        child_mappings = self.config.get("child_mappings", [])
+        for mapping in child_mappings:
+            source_table = mapping.get("source_table")
+            target_table = mapping.get("target_table")
+            
+            # Validate table fields exist
+            if not frappe.get_meta(self.source_doctype).get_field(source_table):
+                frappe.throw(f"Source table '{source_table}' does not exist in {self.source_doctype}")
+            
+            if not frappe.get_meta(self.target_doctype).get_field(target_table):
+                frappe.throw(f"Target table '{target_table}' does not exist in {self.target_doctype}")
+            
+            # Get child doctypes
+            source_child_doctype = frappe.get_meta(self.source_doctype).get_field(source_table).options
+            target_child_doctype = frappe.get_meta(self.target_doctype).get_field(target_table).options
+            
+            # Validate field mappings
+            for source_field, target_field in mapping.get("fields", {}).items():
+                if not frappe.get_meta(source_child_doctype).has_field(source_field):
+                    frappe.throw(f"Source field '{source_field}' does not exist in child table {source_child_doctype}")
+                
+                if not frappe.get_meta(target_child_doctype).has_field(target_field):
+                    frappe.throw(f"Target field '{target_field}' does not exist in child table {target_child_doctype}")
             
     def _validate_field_exists(self, doctype, field_path, field_type):
         """Validate that a field exists in the doctype, handling child tables"""
