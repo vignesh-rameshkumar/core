@@ -1,0 +1,145 @@
+{
+ "actions": [],
+ "autoname": "field:sync_name",
+ "creation": "2025-04-21 23:40:58.836950",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "sync_name",
+  "description",
+  "enabled",
+  "section_break_1",
+  "source_doctype",
+  "target_doctype",
+  "bidirectional",
+  "section_break_2",
+  "config",
+  "section_break_3",
+  "on_delete_action",
+  "on_delete_field",
+  "section_break_4",
+  "enable_logging"
+ ],
+ "fields": [
+  {
+   "fieldname": "sync_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Sync Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled"
+  },
+  {
+   "depends_on": "eval:doc.enabled=='1'",
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break",
+   "label": "DocTypes"
+  },
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_doctype",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Target DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "bidirectional",
+   "fieldtype": "Check",
+   "label": "Bidirectional Sync"
+  },
+  {
+   "depends_on": "eval:doc.enabled=='1'",
+   "fieldname": "section_break_2",
+   "fieldtype": "Section Break",
+   "label": "Field Mappings"
+  },
+  {
+   "default": "// {\n//     \"direct_fields\": {\n//       \"employee_id\": \"user_id\",\n//       \"employee_name\": \"full_name\",\n//       \"department\": \"department\",\n//       \"joining_date\": \"start_date\",\n//       \"salary\": \"compensation\"\n//     },\n//     \"child_mappings\": [\n//       {\n//         \"source_table\": \"education\",\n//         \"target_table\": \"qualifications\",\n//         \"fields\": {\n//           \"degree\": \"qualification\",\n//           \"institution\": \"school\",\n//           \"year\": \"completion_year\"\n//         },\n//         \"key_field\": \"degree\"\n//       },\n//       {\n//         \"source_table\": \"experience\",\n//         \"target_table\": \"work_history\",\n//         \"fields\": {\n//           \"company\": \"employer\",\n//           \"position\": \"role\",\n//           \"duration\": \"years\"\n//         }\n//       }\n//     ],\n//     \"conditions\": {\n//       \"only_if\": [\n//         [\"status\", \"==\", \"Active\"],\n//         [\"department\", \"in\", [\"IT\", \"HR\", \"Finance\"]]\n//       ],\n//       \"skip_if\": [\n//         [\"is_temporary\", \"==\", true],\n//         [\"salary\", \"<\", 10000]\n//       ]\n//     },\n//     \"transform\": {\n//       \"salary\": \"convert_to_annual\",\n//       \"joining_date\": \"format_date\"\n//     },\n//     \"options\": {\n//       \"sync_attachments\": true,\n//       \"sync_comments\": false,\n//       \"update_modified\": false\n//     },\n//     \"hooks\": {\n//       \"before_sync\": \"custom_before_sync\",\n//       \"after_sync\": \"custom_after_sync\"\n//     }\n//   }",
+   "description": "JSON configuration for field mappings",
+   "fieldname": "config",
+   "fieldtype": "JSON",
+   "label": "Configuration"
+  },
+  {
+   "depends_on": "eval:doc.enabled=='1'",
+   "fieldname": "section_break_3",
+   "fieldtype": "Section Break",
+   "label": "Deletion Handling"
+  },
+  {
+   "default": "None",
+   "fieldname": "on_delete_action",
+   "fieldtype": "Select",
+   "label": "On Delete Action",
+   "options": "None\nDelete\nArchive\nSet Field"
+  },
+  {
+   "depends_on": "eval:doc.on_delete_action=='Set Field'",
+   "description": "Field name to set to 1 when source document is deleted",
+   "fieldname": "on_delete_field",
+   "fieldtype": "Data",
+   "label": "Field to Set on Delete"
+  },
+  {
+   "depends_on": "eval:doc.enabled=='1'",
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break",
+   "label": "Logging"
+  },
+  {
+   "default": "1",
+   "fieldname": "enable_logging",
+   "fieldtype": "Check",
+   "label": "Enable Logging"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-04-23 12:28:50.955913",
+ "modified_by": "Administrator",
+ "module": "Agnikul Core ERP",
+ "name": "Live Sync",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

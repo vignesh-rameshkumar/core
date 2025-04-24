@@ -1,9 +1,10 @@
 
-__version__ = '1.1.1'
+__version__ = '1.1.3'
 
 import frappe
 from frappe import _
 import json
+from datetime import datetime
 
 @frappe.whitelist()
 def get_roles(module=None):
@@ -32,14 +33,30 @@ def get_roles(module=None):
         }
         return role_flags
 
-    # Fetch user and employee info in fewer calls
+    # Fetch employee details
     employee_info = frappe.db.get_value(
-        "Employee", {"user_id": user}, ["employee_name", "department"], as_dict=True
+        "Employee",
+        {"user_id": user},
+        ["employee_name", "department", "date_of_birth", "date_of_joining"],
+        as_dict=True
     ) or {}
 
+    # Fetch user info
     user_info = frappe.db.get_value(
-        "User", user, ["desk_theme", "user_image"], as_dict=True
+        "User",
+        user,
+        ["desk_theme", "user_image"],
+        as_dict=True
     ) or {}
+
+    # Get today's date
+    today = datetime.today().date()
+
+    # Check for birthday and anniversary
+    dob = employee_info.get("date_of_birth")
+    doj = employee_info.get("date_of_joining")
+    is_birthday = dob and dob.month == today.month and dob.day == today.day
+    is_anniversary = doj and doj.month == today.month and doj.day == today.day
 
     return {
         "roles": user_roles,
@@ -47,6 +64,8 @@ def get_roles(module=None):
         "department": employee_info.get("department"),
         "desk_theme": user_info.get("desk_theme"),
         "user_image": user_info.get("user_image"),
+        "is_birthday": is_birthday,
+        "is_anniversary": is_anniversary,
     }
 
 @frappe.whitelist()

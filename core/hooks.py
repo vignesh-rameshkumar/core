@@ -1,3 +1,4 @@
+from __future__ import unicode_literals
 from . import __version__ as app_version
 
 app_name = "core"
@@ -8,6 +9,7 @@ app_email = "automationbot@agnikul.in"
 app_license = "MIT"
 
 after_install = "core.api.install.create_roles"
+after_migrate = "core.sync_handler.clear_sync_cache"
 
 
 doc_events = {
@@ -33,6 +35,11 @@ doc_events = {
         "before_validate": "core.api.employee.before_validate",
         "validate": "core.api.employee.validate_user_status",
         "before_save": "core.api.employee.before_save"
+    },
+    "*": {
+        "after_insert": "core.sync_handler.process_doc_event",
+        "on_update": "core.sync_handler.process_doc_event", 
+        "on_trash": "core.sync_handler.process_doc_event"
     }
 }
 
