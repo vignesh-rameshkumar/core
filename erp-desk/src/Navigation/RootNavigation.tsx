@@ -14,26 +14,25 @@ const RootNavigation = () => {
         const [key, value] = cookie.split("=");
         cookieData[key.trim()] = decodeURIComponent(value);
     });
-    const hasPermission = userDetails?.roles?.includes('Employee')
-
+    const hasPermission = userDetails?.roles?.length > 0;
 
     useEffect(() => {
         const fetchUserData = async () => {
             const temp = await getUserDetails();
-            if (temp?.roles?.includes('Employee')) {
+            if (temp?.roles?.length > 0) {
                 if (window.location.pathname !== '/erp-desk') {
                     window.location.href = '/erp-desk';
                 }
             } else {
                 if (window.location.pathname !== '/login') {
-                    window.location.href = '/login'; 
+                    window.location.href = '/login';
                 }
             }
             setUserDetails(temp);
         };
         fetchUserData();
     }, []);
-    
+
 
     useEffect(() => {
         dispatch(fetchUserData());
