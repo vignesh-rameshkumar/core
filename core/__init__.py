@@ -31,6 +31,11 @@ def get_roles(module=None):
             f"{module}_admin": has_role(f"{module} admin"),
             "super_admin": has_role("super admin"),
         }
+
+        # New: if asking about the Fleet module, expose is_vehicle
+        if module == "fleet":
+            role_flags["is_vehicle"] = has_role("vehicle")
+
         return role_flags
 
     # Fetch employee details
