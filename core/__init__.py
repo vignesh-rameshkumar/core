@@ -30,6 +30,7 @@ def get_roles(module=None):
             f"{module}_pfl": has_role(f"{module} pfl"),
             f"{module}_admin": has_role(f"{module} admin"),
             "super_admin": has_role("super admin"),
+            "vehicle": has_role("vehicle"),
         }
         return role_flags
 
@@ -92,7 +93,7 @@ def update_desk_cache(self, *args, **kwargs):
 
 @frappe.whitelist()
 def search(txt, limit=20):
-    
+
     limit = int(limit)
     all_doctypes = frappe.get_all("DocType", filters={"istable": 0}, pluck="name")
     permitted_doctypes = []
