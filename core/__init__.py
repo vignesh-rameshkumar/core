@@ -30,8 +30,11 @@ def get_roles(module=None):
             f"{module}_pfl": has_role(f"{module} pfl"),
             f"{module}_admin": has_role(f"{module} admin"),
             "super_admin": has_role("super admin"),
-            "vehicle": has_role("vehicle"),
         }
+
+        if module == "Fleet":
+            role_flags["vehicle"] = has_role("vehicle")
+
         return role_flags
 
     # Fetch employee details
