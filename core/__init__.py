@@ -1,5 +1,5 @@
 
-__version__ = '1.1.3'
+__version__ = '1.1.4'
 
 import frappe
 from frappe import _
@@ -99,6 +99,7 @@ def _cache_key(user):
     return f"doctype_list:{user}"
 
 @frappe.whitelist()
+
 def search(txt=None, limit=20):
     
     user = frappe.session.user
