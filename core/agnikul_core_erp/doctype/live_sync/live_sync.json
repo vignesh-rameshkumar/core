@@ -34,7 +34,8 @@
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description"
+   "label": "Description",
+   "max_height": "100px"
   },
   {
    "default": "1",
@@ -77,8 +78,8 @@
    "label": "Field Mappings"
   },
   {
-   "default": "// {\n//     \"direct_fields\": {\n//       \"employee_id\": \"user_id\",\n//       \"employee_name\": \"full_name\",\n//       \"department\": \"department\",\n//       \"joining_date\": \"start_date\",\n//       \"salary\": \"compensation\"\n//     },\n//     \"child_mappings\": [\n//       {\n//         \"source_table\": \"education\",\n//         \"target_table\": \"qualifications\",\n//         \"fields\": {\n//           \"degree\": \"qualification\",\n//           \"institution\": \"school\",\n//           \"year\": \"completion_year\"\n//         },\n//         \"key_field\": \"degree\"\n//       },\n//       {\n//         \"source_table\": \"experience\",\n//         \"target_table\": \"work_history\",\n//         \"fields\": {\n//           \"company\": \"employer\",\n//           \"position\": \"role\",\n//           \"duration\": \"years\"\n//         }\n//       }\n//     ],\n//     \"conditions\": {\n//       \"only_if\": [\n//         [\"status\", \"==\", \"Active\"],\n//         [\"department\", \"in\", [\"IT\", \"HR\", \"Finance\"]]\n//       ],\n//       \"skip_if\": [\n//         [\"is_temporary\", \"==\", true],\n//         [\"salary\", \"<\", 10000]\n//       ]\n//     },\n//     \"transform\": {\n//       \"salary\": \"convert_to_annual\",\n//       \"joining_date\": \"format_date\"\n//     },\n//     \"options\": {\n//       \"sync_attachments\": true,\n//       \"sync_comments\": false,\n//       \"update_modified\": false\n//     },\n//     \"hooks\": {\n//       \"before_sync\": \"custom_before_sync\",\n//       \"after_sync\": \"custom_after_sync\"\n//     }\n//   }",
-   "description": "JSON configuration for field mappings",
+   "description": "<pre>{\n  \"identifier_mapping\": {\n    \"employee_email\": \"user_email\",\n    \"employee_id\": \"user_id\"\n  },\n  \"direct_fields\": {\n    \"source_field1\": \"target_field1\",\n    \"source_field2\": \"target_field2\",\n    \"parentfield.childfield\": \"parentfield.childfield\"\n  },\n  \"child_mappings\": [\n    {\n      \"source_table\": \"child_table_fieldname\",\n      \"target_table\": \"target_child_table_fieldname\",\n      \"fields\": {\n        \"source_field1\": \"target_field1\",\n        \"source_field2\": \"target_field2\"\n      },\n      \"key_field\": \"id_field\"\n    }\n  ],\n  \"conditions\": {\n    \"only_if\": [\n      [\"status\", \"==\", \"Active\"]\n    ],\n    \"skip_if\": [\n      [\"is_cancelled\", \"==\", true]\n    ]\n  },\n  \"transform\": {\n    \"source_field\": \"transform_function_name\"\n  },\n  \"hooks\": {\n    \"before_sync\": \"module_name.before_sync_function\",\n    \"after_sync\": \"module_name.after_sync_function\"\n  },\n  \"options\": {\n    \"sync_attachments\": true,\n    \"sync_comments\": false\n  }\n}</pre>",
+   "documentation_url": "https://docs.google.com/document/d/1yJNNTiA6QKObOXxOJoRcEuLNHxcNBCzEPHpxf6QtGJ4/edit?tab=t.0",
    "fieldname": "config",
    "fieldtype": "JSON",
    "label": "Configuration"
@@ -118,7 +119,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-04-23 12:28:50.955913",
+ "modified": "2025-04-26 10:26:14.474114",
  "modified_by": "Administrator",
  "module": "Agnikul Core ERP",
  "name": "Live Sync",
