@@ -1,124 +1,86 @@
-# File: your_app_name/sync_hooks.py
-
 import frappe
-import json
 
-def store_complete_data(source_doc, is_forward, sync_config):
-    """
-    Before sync hook to store all source document data in the user_data JSON field
-    """
-    try:
-        # We only want to store data when syncing from Employee to User
-        if not is_forward:
+############# Before Sync Hooks #############
+
+
+############# After Sync Hooks #############
+def sync_name(source_doc, target_doc, is_forward, sync_config):
+
+    # Determine if we need to rename
+    if is_forward:
+        # Target document should get source document's name
+        new_name = source_doc.name
+        doc_to_rename = target_doc
+    else:
+        # First, find the matching source document
+        source_doctype = sync_config.source_doctype
+        filters = {}
+        
+        # Use identifier mapping to find the matching document
+        identifier_mapping = sync_config.config.get("identifier_mapping", {})
+        if identifier_mapping:
+            for src_field, tgt_field in identifier_mapping.items():
+                if hasattr(source_doc, tgt_field):
+                    value = source_doc.get(tgt_field)
+                    filters[src_field] = value
+                    break
+        
+        # If no identifier mapping or couldn't find value, try the first field mapping
+        if not filters and sync_config.config.get("direct_fields"):
+            field_mappings = sync_config.config.get("direct_fields", {})
+            for src_field, tgt_field in field_mappings.items():
+                if hasattr(source_doc, tgt_field):
+                    value = source_doc.get(tgt_field)
+                    filters[src_field] = value
+                    break
+                    
+        # If we still don't have filters, we can't find the matching source doc
+        if not filters:
+            frappe.log_error(
+                f"Could not determine filters to find source document for {source_doc.doctype} {source_doc.name}",
+                "Document Name Sync Error"
+            )
             return
             
-        # Skip if source doc is not Demo Employee
-        if source_doc.doctype != "Demo Employee":
+        # Find the matching source document
+        source_docs = frappe.get_all(
+            source_doctype,
+            filters=filters,
+            fields=["name"],
+            limit=1
+        )
+        
+        if not source_docs:
+            frappe.log_error(
+                f"Could not find matching source document for {source_doc.doctype} {source_doc.name} with filters {filters}",
+                "Document Name Sync Error"
+            )
             return
+            
+        # Use the source document's name
+        new_name = source_docs[0].name
+        doc_to_rename = target_doc
         
-        # Capture all main fields from Demo Employee
-        data = {}
-        for field in frappe.get_meta("Demo Employee").fields:
-            if field.fieldtype not in ["Table", "Section Break", "Column Break", "Tab Break"]:
-                data[field.fieldname] = source_doc.get(field.fieldname)
+    # If the document already has the correct name, don't do anything
+    if doc_to_rename.name == new_name:
+        return
         
-        # Capture child table data from Employee_Details
-        if hasattr(source_doc, "details"):
-            child_data = []
-            for child_row in source_doc.get("details", []):
-                row_data = {}
-                # We know the fields are f1, f2, f3
-                row_data["f1"] = child_row.get("f1")
-                row_data["f2"] = child_row.get("f2")
-                row_data["f3"] = child_row.get("f3")
-                child_data.append(row_data)
-            data["child_data"] = child_data
-        
-        # Add metadata
-        data["_metadata"] = {
-            "sync_timestamp": frappe.utils.now(),
-            "source_doctype": "Demo Employee",
-            "source_name": source_doc.name
-        }
-        
-        # Store the data for later use in the after_sync hook
-        if not hasattr(sync_config, "_temp_data"):
-            sync_config._temp_data = {}
-        
-        sync_config._temp_data[source_doc.name] = data
-        
-        # Set the same name for target document
-        sync_config._target_name = source_doc.name
+    try:
+        # Rename the document
+        frappe.rename_doc(
+            doc_to_rename.doctype,
+            doc_to_rename.name,
+            new_name,
+            force=True
+        )
         
         frappe.log_error(
-            f"Stored complete data for {source_doc.doctype} {source_doc.name}",
-            "Sync Before Hook"
+            f"Renamed {doc_to_rename.doctype} from {doc_to_rename.name} to {new_name}. "
+            f"Direction: {'Forward' if is_forward else 'Backward'}",
+            "Document Name Sync"
         )
-    
     except Exception as e:
         frappe.log_error(
-            f"Error in store_complete_data hook: {str(e)}\n{frappe.get_traceback()}",
-            "Sync Hook Error"
-        )
-
-def update_json_data(source_doc, target_doc, is_forward, sync_config):
-    """
-    After sync hook to store the captured data in the user_data field
-    """
-    try:
-        # We only want to update the user_data field when syncing from Employee to User
-        if not is_forward:
-            return
-            
-        # Skip if target doc is not Demo User
-        if target_doc.doctype != "Demo User":
-            return
-            
-        # Get the stored data or use an empty object
-        data = {}
-        if hasattr(sync_config, "_temp_data") and source_doc.name in sync_config._temp_data:
-            data = sync_config._temp_data[source_doc.name]
-            # Clean up temp data
-            del sync_config._temp_data[source_doc.name]
-        
-        # Always set the user_data field, even if it's just an empty object
-        # This ensures the mandatory field requirement is satisfied
-        target_doc.user_data = json.dumps(data, default=str)
-        
-        # Get the target name (should be same as source doc name)
-        target_name = source_doc.name
-        if hasattr(sync_config, "_target_name"):
-            target_name = sync_config._target_name
-        
-        # If the document was just created, rename it to match the source doc
-        if target_doc.name != target_name:
-            try:
-                # Rename the target document 
-                frappe.rename_doc(target_doc.doctype, target_doc.name, target_name, force=True)
-                
-                # Update our reference to the renamed document
-                target_doc = frappe.get_doc(target_doc.doctype, target_name)
-                
-                frappe.log_error(
-                    f"Renamed {target_doc.doctype} from {target_doc.name} to {target_name}",
-                    "Sync After Hook"
-                )
-            except Exception as rename_error:
-                frappe.log_error(
-                    f"Error renaming document: {str(rename_error)}",
-                    "Sync Rename Error"
-                )
-        
-        # Set user_data field directly to bypass validation
-        frappe.db.set_value("Demo User", target_doc.name, "user_data", json.dumps(data, default=str))
-        
-        frappe.log_error(
-            f"Updated user_data in {target_doc.doctype} {target_doc.name}",
-            "Sync After Hook"
-        )
-    
-    except Exception as e:
-        frappe.log_error(
-            f"Error in update_json_data hook: {str(e)}\n{frappe.get_traceback()}",
-            "Sync Hook Error"
+            f"Error renaming document {doc_to_rename.doctype} {doc_to_rename.name} to {new_name}: {str(e)}",
+            "Document Name Sync Error"
         )
