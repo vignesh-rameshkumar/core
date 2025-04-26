@@ -73,6 +73,9 @@ class LiveSync(Document):
                     frappe.throw(f"Target field '{target_field}' does not exist in child table {target_child_doctype}")
             
     def _validate_field_exists(self, doctype, field_path, field_type):
+
+        if field_path == "name":
+            return True
         """Validate that a field exists in the doctype, handling child tables"""
         # Check if this is a child table field
         if "." in field_path:
@@ -148,16 +151,7 @@ class LiveSync(Document):
             frappe.cache().delete_value(f"sync_configs_for_{self.target_doctype}")
             
     def find_matching_document(self, source_doc, is_forward=True):
-        """
-        Find matching document in target doctype based on identifier mapping
         
-        Args:
-            source_doc: The source document to find a match for
-            is_forward: Direction of sync (True for source→target, False for target→source)
-            
-        Returns:
-            The matching document or None if no match is found
-        """
         # Determine source and target doctypes based on direction
         if is_forward:
             source_doctype = self.source_doctype
@@ -183,9 +177,11 @@ class LiveSync(Document):
             else:
                 source_field, target_field = tgt_field, src_field
             
-            # Get source value
+            # Get source value - special handling for 'name'
             source_value = None
-            if "." in source_field:
+            if source_field == "name":
+                source_value = source_doc.name
+            elif "." in source_field:
                 source_value = self._get_hierarchical_field_value(source_doc, source_field)
             else:
                 source_value = source_doc.get(source_field)
@@ -194,8 +190,12 @@ class LiveSync(Document):
             if source_value is None:
                 continue
             
-            # Query for matching document
-            if "." not in target_field:  # Can only query non-hierarchical fields directly
+            # Query for matching document - special handling for 'name'
+            if target_field == "name":
+                # Direct lookup by name
+                if frappe.db.exists(target_doctype, source_value):
+                    return frappe.get_doc(target_doctype, source_value)
+            elif "." not in target_field:  # Can only query non-hierarchical fields directly
                 filters = {target_field: source_value}
                 target_docs = frappe.get_all(
                     target_doctype,
@@ -206,6 +206,10 @@ class LiveSync(Document):
                 
                 if target_docs:
                     return frappe.get_doc(target_doctype, target_docs[0].name)
+        
+        # Additional fallback: check for document with matching name
+        if frappe.db.exists(target_doctype, source_doc.name):
+            return frappe.get_doc(target_doctype, source_doc.name)
         
         # No match found
         return None
