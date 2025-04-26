@@ -36,6 +36,17 @@ doc_events = {
         "validate": "core.api.employee.validate_user_status",
         "before_save": "core.api.employee.before_save"
     },
+
+    "Has Role": {
+        "on_update": "core.invalidate_user_cache",
+        "on_trash":  "core.invalidate_user_cache",
+    },
+
+    "DocPerm": {
+        "on_update": "core.invalidate_user_cache",
+        "on_trash":  "core.invalidate_user_cache",
+    },
+
     "*": {
         "after_insert": "core.sync_handler.process_doc_event",
         "on_update": "core.sync_handler.process_doc_event", 

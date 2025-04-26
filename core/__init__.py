@@ -32,8 +32,9 @@ def get_roles(module=None):
             "super_admin": has_role("super admin"),
         }
 
-        if module == "Fleet":
-            role_flags["vehicle"] = has_role("vehicle")
+        # New: if asking about the Fleet module, expose is_vehicle
+        if module == "fleet":
+            role_flags["is_vehicle"] = has_role("vehicle")
 
         return role_flags
 
@@ -94,18 +95,45 @@ def update_desk_cache(self, *args, **kwargs):
     frappe.cache().set_value(cache_key, config_data)
 
 
+def _cache_key(user):
+    return f"doctype_list:{user}"
+
 @frappe.whitelist()
-def search(txt, limit=20):
 
-    limit = int(limit)
-    all_doctypes = frappe.get_all("DocType", filters={"istable": 0}, pluck="name")
-    permitted_doctypes = []
+def search(txt=None, limit=20):
+    
+    user = frappe.session.user
+    cache = frappe.cache()
+    cache_key = _cache_key(user)
 
-    for doctype in all_doctypes:
-        if frappe.has_permission(doctype):  # This defaults to checking for "read"
-            if not txt or txt.lower() in doctype.lower():
-                permitted_doctypes.append({"name": doctype})
-            if len(permitted_doctypes) >= limit:
+    permitted = cache.get_value(cache_key)
+    if permitted is None:
+        all_dts = frappe.get_all(
+            "DocType", filters={"istable": 0}, pluck="name"
+        )
+        permitted = [dt for dt in all_dts if frappe.has_permission(dt)]
+        cache.set_value(cache_key, permitted)
+
+    txt_lower = (txt or "").lower()
+    result = []
+    for dt in permitted:
+        if not txt_lower or txt_lower in dt.lower():
+            result.append({"name": dt})
+            if len(result) >= int(limit):
                 break
 
-    return permitted_doctypes
+    return result
+
+def invalidate_user_cache(doc, method):
+
+    cache = frappe.cache()
+
+    if doc.doctype == "Has Role":
+        user = doc.parent
+        cache.delete_value(_cache_key(user))
+    elif doc.doctype == "DocPerm":
+        users = frappe.get_all(
+            "User", filters={"enabled": 1, "user_type": "System User"}, pluck="name"
+        )
+        for user in users:
+            cache.delete_value(_cache_key(user))
