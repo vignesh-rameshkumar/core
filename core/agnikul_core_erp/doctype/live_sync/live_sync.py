@@ -702,7 +702,7 @@ class LiveSync(Document):
         
     @frappe.whitelist()
     def trigger_bulk_sync(self, source_doctype=None, filters=None, limit=100):
-        
+        """Trigger bulk synchronization with optional filters"""
         try:
             # Default to source doctype if not specified
             if not source_doctype:
@@ -732,10 +732,14 @@ class LiveSync(Document):
                     "success": False,
                     "message": f"No documents found matching filters in {source_doctype}"
                 }
-                
+            
+            # Generate a unique job ID for this sync operation
+            import uuid
+            job_id = f"bulk_sync_{uuid.uuid4().hex[:10]}"
+                    
             # For larger sets, use a background job
             if len(docs) > 10:
-                # Enqueue background job
+                # Enqueue background job with the job_id
                 frappe.enqueue(
                     'core.agnikul_core_erp.doctype.live_sync.live_sync.process_bulk_sync',
                     queue='long',
@@ -744,12 +748,31 @@ class LiveSync(Document):
                     source_doctype=source_doctype,
                     doc_names=[d.name for d in docs],
                     is_forward=is_forward,
+                    job_id=job_id,
                     now=False
+                )
+                
+                # Create an initial record in cache to track this job
+                frappe.cache().hset(
+                    f"bulk_sync_job:{job_id}",
+                    {
+                        "total": len(docs),
+                        "processed": 0,
+                        "succeeded": 0,
+                        "failed": 0,
+                        "status": "Queued",
+                        "start_time": frappe.utils.now(),
+                        "sync_config": self.name,
+                        "source_doctype": source_doctype,
+                        "direction": "Forward" if is_forward else "Backward"
+                    }
                 )
                 
                 return {
                     "success": True,
-                    "message": f"Bulk sync of {len(docs)} documents has been queued as a background job. Check Sync Logs for results."
+                    "message": f"Bulk sync of {len(docs)} documents has been queued as a background job.",
+                    "job_id": job_id,
+                    "total_docs": len(docs)
                 }
             else:
                 # Process directly for smaller sets
@@ -791,7 +814,7 @@ class LiveSync(Document):
                 }
         except Exception as e:
             frappe.log_error(f"Bulk sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Bulk Error")
-            return {"success": False, "message": str(e)}        
+            return {"success": False, "message": str(e)}    
 
     def _process_field_mappings(self, source_doc, target_doc, is_forward=True):
         """Process all field mappings with special handling for hierarchical fields"""
@@ -1208,7 +1231,7 @@ def run_test_sync(doctype, docname, source_doctype=None, source_name=None):
         frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
         return {"success": False, "message": str(e)}
     
-def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward):
+def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward, job_id=None):
     """
     Process bulk sync in background
     
@@ -1217,6 +1240,7 @@ def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward):
         source_doctype: DocType to sync from
         doc_names: List of document names to sync
         is_forward: Direction of sync
+        job_id: Optional job ID for tracking progress
     """
     try:
         # Get sync configuration
@@ -1228,7 +1252,28 @@ def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward):
         succeeded = 0
         failed = 0
         
-        # Process in batches of 20
+        # Create a unique job ID if not provided
+        if not job_id:
+            import uuid
+            job_id = f"bulk_sync_{uuid.uuid4().hex[:10]}"
+            
+        # Store initial job info in cache
+        frappe.cache().hset(
+            f"bulk_sync_job:{job_id}",
+            {
+                "total": total,
+                "processed": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "status": "In Progress",
+                "start_time": frappe.utils.now(),
+                "sync_config": sync_config,  # Store the sync configuration name
+                "source_doctype": source_doctype,
+                "direction": "Forward" if is_forward else "Backward"
+            }
+        )
+        
+        # Process in batches of 50
         batch_size = 50
         
         for i in range(0, total, batch_size):
@@ -1252,16 +1297,64 @@ def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward):
                 
                 processed += 1
                 
-                # Update progress every 10 documents
+                # Update progress every 10 documents, but use job-specific progress tracking
                 if processed % 10 == 0:
-                    frappe.publish_progress(
-                        percent=processed * 100 / total,
-                        title="Bulk Sync",
-                        description=f"Processed {processed} of {total} documents"
+                    # Update cache with current progress
+                    frappe.cache().hset(
+                        f"bulk_sync_job:{job_id}",
+                        {
+                            "processed": processed,
+                            "succeeded": succeeded,
+                            "failed": failed,
+                            "percent": round(processed * 100 / total, 2)
+                        }
+                    )
+                    
+                    # Use socketio for real-time updates to the specific client
+                    frappe.publish_realtime(
+                        event='bulk_sync_progress',
+                        message={
+                            'job_id': job_id,
+                            'percent': round(processed * 100 / total, 2),
+                            'processed': processed,
+                            'total': total,
+                            'succeeded': succeeded,
+                            'failed': failed
+                        },
+                        user=frappe.session.user,  # Only send to the user who initiated the sync
+                        doctype='Live Sync',
+                        docname=sync_config
                     )
             
             # Commit after each batch
             frappe.db.commit()
+        
+        # Update final job status
+        frappe.cache().hset(
+            f"bulk_sync_job:{job_id}",
+            {
+                "processed": processed,
+                "succeeded": succeeded,
+                "failed": failed,
+                "percent": 100,
+                "status": "Completed",
+                "end_time": frappe.utils.now()
+            }
+        )
+        
+        # Send final completion notification
+        frappe.publish_realtime(
+            event='bulk_sync_completed',
+            message={
+                'job_id': job_id,
+                'processed': processed,
+                'succeeded': succeeded, 
+                'failed': failed
+            },
+            user=frappe.session.user,
+            doctype='Live Sync',
+            docname=sync_config
+        )
         
         # Log final results
         frappe.log_error(
@@ -1270,4 +1363,251 @@ def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward):
         )
         
     except Exception as e:
+        # Update job status on error
+        if job_id:
+            frappe.cache().hset(
+                f"bulk_sync_job:{job_id}",
+                {
+                    "status": "Error",
+                    "error": str(e),
+                    "end_time": frappe.utils.now()
+                }
+            )
+            
+            # Notify the user of the error
+            frappe.publish_realtime(
+                event='bulk_sync_error',
+                message={
+                    'job_id': job_id,
+                    'error': str(e)
+                },
+                user=frappe.session.user,
+                doctype='Live Sync',
+                docname=sync_config
+            )
+        
         frappe.log_error(f"Bulk sync process error: {str(e)}\n{traceback.format_exc()}", "Bulk Sync Error")
+   
+    try:
+        # Get sync configuration
+        sync = frappe.get_doc("Live Sync", sync_config)
+        
+        # Initialize counters
+        total = len(doc_names)
+        processed = 0
+        succeeded = 0
+        failed = 0
+        
+        # Create a unique job ID if not provided
+        if not job_id:
+            import uuid
+            job_id = f"bulk_sync_{uuid.uuid4().hex[:10]}"
+            
+        # Store initial job info in cache
+        frappe.cache().hset(
+            f"bulk_sync_job:{job_id}",
+            {
+                "total": total,
+                "processed": 0,
+                "succeeded": 0,
+                "failed": 0,
+                "status": "In Progress",
+                "start_time": frappe.utils.now()
+            }
+        )
+        
+        # Process in batches of 50
+        batch_size = 50
+        
+        for i in range(0, total, batch_size):
+            batch = doc_names[i:i+batch_size]
+            
+            for doc_name in batch:
+                try:
+                    # Get full document
+                    source_doc = frappe.get_doc(source_doctype, doc_name)
+                    
+                    # Process sync
+                    sync.sync_document(source_doc, "on_update", is_forward)
+                    
+                    succeeded += 1
+                except Exception as e:
+                    failed += 1
+                    frappe.log_error(
+                        f"Error syncing {source_doctype} {doc_name}: {str(e)}",
+                        "Bulk Sync Error"
+                    )
+                
+                processed += 1
+                
+                # Update progress every 10 documents, but use job-specific progress tracking
+                if processed % 10 == 0:
+                    # Update cache with current progress
+                    frappe.cache().hset(
+                        f"bulk_sync_job:{job_id}",
+                        {
+                            "processed": processed,
+                            "succeeded": succeeded,
+                            "failed": failed,
+                            "percent": round(processed * 100 / total, 2)
+                        }
+                    )
+                    
+                    # Use socketio for real-time updates to the specific client
+                    frappe.publish_realtime(
+                        event='bulk_sync_progress',
+                        message={
+                            'job_id': job_id,
+                            'percent': round(processed * 100 / total, 2),
+                            'processed': processed,
+                            'total': total,
+                            'succeeded': succeeded,
+                            'failed': failed
+                        },
+                        user=frappe.session.user,  # Only send to the user who initiated the sync
+                        doctype='Live Sync',
+                        docname=sync_config
+                    )
+            
+            # Commit after each batch
+            frappe.db.commit()
+        
+        # Update final job status
+        frappe.cache().hset(
+            f"bulk_sync_job:{job_id}",
+            {
+                "processed": processed,
+                "succeeded": succeeded,
+                "failed": failed,
+                "percent": 100,
+                "status": "Completed",
+                "end_time": frappe.utils.now()
+            }
+        )
+        
+        # Send final completion notification
+        frappe.publish_realtime(
+            event='bulk_sync_completed',
+            message={
+                'job_id': job_id,
+                'processed': processed,
+                'succeeded': succeeded, 
+                'failed': failed
+            },
+            user=frappe.session.user,
+            doctype='Live Sync',
+            docname=sync_config
+        )
+        
+        # Log final results
+        frappe.log_error(
+            f"Bulk sync completed: {processed} processed, {succeeded} succeeded, {failed} failed",
+            "Bulk Sync Complete"
+        )
+        
+    except Exception as e:
+        # Update job status on error
+        if job_id:
+            frappe.cache().hset(
+                f"bulk_sync_job:{job_id}",
+                {
+                    "status": "Error",
+                    "error": str(e),
+                    "end_time": frappe.utils.now()
+                }
+            )
+            
+            # Notify the user of the error
+            frappe.publish_realtime(
+                event='bulk_sync_error',
+                message={
+                    'job_id': job_id,
+                    'error': str(e)
+                },
+                user=frappe.session.user,
+                doctype='Live Sync',
+                docname=sync_config
+            )
+        
+        frappe.log_error(f"Bulk sync process error: {str(e)}\n{traceback.format_exc()}", "Bulk Sync Error")
+
+@frappe.whitelist()
+def get_bulk_sync_jobs(sync_config=None):
+    """Get the list of bulk sync jobs for a configuration"""
+    try:
+        # Get all job keys from Redis
+        job_keys = frappe.cache().get_keys("bulk_sync_job:*")
+        
+        jobs = []
+        
+        # Get data for each job
+        for key in job_keys:
+            # Extract job_id from the key
+            job_id = key.split(":")[-1]
+            
+            # Get job data
+            job_data = frappe.cache().hgetall(f"bulk_sync_job:{job_id}")
+            
+            if not job_data:
+                continue
+                
+            # Add job_id to the data
+            job_data["job_id"] = job_id
+            
+            # Filter by sync_config if provided
+            if sync_config and job_data.get("sync_config") != sync_config:
+                continue
+                
+            # Convert relevant fields to proper types
+            for field in ["total", "processed", "succeeded", "failed", "percent"]:
+                if field in job_data and job_data[field]:
+                    try:
+                        job_data[field] = int(job_data[field])
+                    except (ValueError, TypeError):
+                        try:
+                            job_data[field] = float(job_data[field])
+                        except (ValueError, TypeError):
+                            pass
+                            
+            # Add to results
+            jobs.append(job_data)
+            
+        # Sort by start time (newest first)
+        jobs.sort(key=lambda x: x.get("start_time", ""), reverse=True)
+        
+        # Limit to most recent 20 jobs to avoid overwhelming the UI
+        jobs = jobs[:20]
+            
+        return {
+            "success": True,
+            "jobs": jobs
+        }
+    except Exception as e:
+        frappe.log_error(f"Error getting jobs list: {str(e)}", "Bulk Sync Jobs Error")
+        return {
+            "success": False,
+            "message": str(e)
+        }
+
+# @frappe.whitelist()
+# def get_bulk_sync_job_status(job_id):
+#     """Get the status of a bulk sync job"""
+#     try:
+#         job_info = frappe.cache().hgetall(f"bulk_sync_job:{job_id}")
+        
+#         if not job_info:
+#             return {
+#                 "success": False,
+#                 "message": "Job not found or expired"
+#             }
+            
+#         return {
+#             "success": True,
+#             "data": job_info
+#         }
+#     except Exception as e:
+#         frappe.log_error(f"Error getting job status: {str(e)}", "Bulk Sync Job Status Error")
+#         return {
+#             "success": False,
+#             "message": str(e)
+#         }
