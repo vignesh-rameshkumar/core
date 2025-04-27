@@ -276,15 +276,13 @@ frappe.ui.form.on('Live Sync', {
                     primary_action_label: __('Close'),
                     primary_action: function() {
                         // Unsubscribe from socket events when dialog is closed
-                        if (progress_dialog.job_id) {
-                            frappe.realtime.off('bulk_sync_progress');
-                            frappe.realtime.off('bulk_sync_completed');
-                            frappe.realtime.off('bulk_sync_error');
-                        }
+                        frappe.realtime.off('bulk_sync_progress');
+                        frappe.realtime.off('bulk_sync_completed');
+                        frappe.realtime.off('bulk_sync_error');
                         progress_dialog.hide();
                     }
                 });
-
+        
                 // Render initial progress UI
                 const $progress_wrapper = progress_dialog.fields_dict.progress_html.$wrapper;
                 $progress_wrapper.html(`
@@ -315,6 +313,44 @@ frappe.ui.form.on('Live Sync', {
                 
                 progress_dialog.show();
                 
+                // DEBUG: Add event listeners before making the call
+                // This will help us see if we're receiving events at all
+                console.log("Setting up realtime listeners");
+                
+                // Set up listeners for real-time updates
+                frappe.realtime.on('bulk_sync_progress', function(data) {
+                    console.log("Received progress update:", data);
+                    updateProgressUI(data);
+                });
+                
+                frappe.realtime.on('bulk_sync_completed', function(data) {
+                    console.log("Received completion notification:", data);
+                    $progress_wrapper.find('.status').text('Status: Completed');
+                    $progress_wrapper.find('.progress-bar').css('width', '100%');
+                    $progress_wrapper.find('.processed').text(`Processed: ${data.processed}/${data.processed}`);
+                    $progress_wrapper.find('.created').text(`Created/Updated: ${data.succeeded}`);
+                    $progress_wrapper.find('.failed').text(`Failed: ${data.failed}`);
+                    
+                    // Show summary message
+                    frappe.show_alert({
+                        message: __(`Sync completed. ${data.succeeded} created/updated, ${data.failed} failed out of ${data.processed} documents.`),
+                        indicator: 'green'
+                    }, 8);
+                    
+                    // If we have detailed results, show them
+                    show_bulk_sync_results(data);
+                });
+                
+                frappe.realtime.on('bulk_sync_error', function(data) {
+                    console.log("Received error notification:", data);
+                    $progress_wrapper.find('.status').html(`Status: <span class="text-danger">Error: ${data.error}</span>`);
+                    
+                    frappe.show_alert({
+                        message: __(`Sync failed: ${data.error}`),
+                        indicator: 'red'
+                    }, 5);
+                });
+                
                 // Call method
                 frm.call({
                     method: 'trigger_bulk_sync',
@@ -325,88 +361,17 @@ frappe.ui.form.on('Live Sync', {
                         limit: values.limit
                     },
                     callback: function(r) {
+                        console.log("Bulk sync initiated, response:", r);
+                        
                         if (r.message && r.message.success) {
                             if (r.message.job_id) {
-                                // Store job ID for tracking
-                                progress_dialog.job_id = r.message.job_id;
-                                
-                                // Update UI to show it's a background job and display job ID
+                                // It's a background job
                                 $progress_wrapper.find('.status').text('Status: Processing in background...');
                                 $progress_wrapper.find('.processed').text(`Processed: 0/${r.message.total_docs}`);
                                 
-                                // Add job ID with copy button to the progress dialog
-                                $progress_wrapper.append(`
-                                    <div class="job-id-container mt-3 p-2" style="background-color: var(--control-bg); border-radius: 4px;">
-                                        <div class="row">
-                                            <div class="col-md-9">
-                                                <strong>${__('Job ID')}:</strong> <span class="job-id-value">${progress_dialog.job_id}</span>
-                                            </div>
-                                            <div class="col-md-3 text-right">
-                                                <button class="btn btn-xs btn-default copy-job-id" data-job-id="${progress_dialog.job_id}">
-                                                    <i class="fa fa-copy"></i> ${__('Copy')}
-                                                </button>
-                                            </div>
-                                        </div>
-                                        <div class="small text-muted mt-1">
-                                            ${__('Save this Job ID to check status later with "Check Sync Status"')}
-                                        </div>
-                                    </div>
-                                `);
-                                
-                                // Add click handler for the copy button
-                                $progress_wrapper.find('.copy-job-id').on('click', function() {
-                                    const jobId = $(this).data('job-id');
-                                    frappe.utils.copy_to_clipboard(jobId);
-                                    frappe.show_alert({
-                                        message: __('Job ID copied to clipboard!'),
-                                        indicator: 'green'
-                                    }, 3);
-                                });
-                                
-                                // Subscribe to real-time progress updates
-                                frappe.realtime.on('bulk_sync_progress', function(data) {
-                                    if (data.job_id === progress_dialog.job_id) {
-                                        updateProgressUI(data);
-                                    }
-                                });
-                                
-                                // Handle completion
-                                frappe.realtime.on('bulk_sync_completed', function(data) {
-                                    if (data.job_id === progress_dialog.job_id) {
-                                        $progress_wrapper.find('.status').text('Status: Completed');
-                                        $progress_wrapper.find('.progress-bar').css('width', '100%');
-                                        $progress_wrapper.find('.processed').text(`Processed: ${data.processed}/${data.processed}`);
-                                        $progress_wrapper.find('.created').text(`Created/Updated: ${data.succeeded}`);
-                                        $progress_wrapper.find('.failed').text(`Failed: ${data.failed}`);
-                                        
-                                        // Show summary message with job ID
-                                        frappe.show_alert({
-                                            message: __(`Sync completed. ${data.succeeded} created/updated, ${data.failed} failed out of ${data.processed} documents.`) + 
-                                                    ` (Job ID: ${data.job_id})`,
-                                            indicator: 'green'
-                                        }, 8);
-                                        
-                                        // If we have detailed results, show them
-                                        show_bulk_sync_results(data);
-                                    }
-                                });
-                                
-                                // Handle errors
-                                frappe.realtime.on('bulk_sync_error', function(data) {
-                                    if (data.job_id === progress_dialog.job_id) {
-                                        $progress_wrapper.find('.status').html(`Status: <span class="text-danger">Error: ${data.error}</span>`);
-                                        
-                                        frappe.show_alert({
-                                            message: __(`Sync failed: ${data.error}`),
-                                            indicator: 'red'
-                                        }, 5);
-                                    }
-                                });
-                                
-                                // Update background notification with job ID
+                                // Update background notification
                                 frappe.show_alert({
-                                    message: __(`Bulk sync started in background for ${r.message.total_docs} documents.`) + 
-                                            ` (Job ID: ${r.message.job_id})`,
+                                    message: __(`Bulk sync started in background for ${r.message.total_docs} documents.`),
                                     indicator: 'blue'
                                 }, 8);
                             } else if (r.message.results) {
@@ -446,6 +411,28 @@ frappe.ui.form.on('Live Sync', {
                 });
             }, __('Start Bulk Sync'));
         }, __('Actions')).addClass('btn-fill');
+
+        // Helper function to update progress UI - with debugging
+        function updateProgressUI(data) {
+            console.log("Updating progress UI with:", data);
+            const percent = data.percent || 0;
+            const $progress_dialogs = $(".modal-dialog:visible").find(".sync-progress");
+            
+            console.log("Found progress dialogs:", $progress_dialogs.length);
+            
+            if ($progress_dialogs.length) {
+                $progress_dialogs.each(function() {
+                    const $progress = $(this);
+                    $progress.find('.progress-bar').css('width', `${percent}%`);
+                    $progress.find('.processed').text(`Processed: ${data.processed}/${data.total}`);
+                    $progress.find('.created').text(`Created/Updated: ${data.succeeded}`);
+                    $progress.find('.failed').text(`Failed: ${data.failed}`);
+                    console.log("Updated progress UI elements");
+                });
+            } else {
+                console.log("No progress dialogs found to update");
+            }
+        }
         
         // Add check sync status button (renamed to 'View Running Jobs')
         frm.add_custom_button(__('View Running Jobs'), function() {
