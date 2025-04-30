@@ -1,8 +1,10 @@
 import frappe
 import json
 from frappe.model.document import Document
-from frappe.utils import now_datetime
+from frappe.utils import now_datetime, cint
 import traceback
+import uuid
+from frappe.utils.background_jobs import enqueue
 
 class LiveSync(Document):
     def __init__(self, *args, **kwargs):
@@ -18,6 +20,7 @@ class LiveSync(Document):
             self.config = {}
             
     def validate(self):
+        """Validate configuration and check for conflicts"""
         self.validate_config()
         self.check_bidirectional_conflicts()
         
@@ -73,10 +76,10 @@ class LiveSync(Document):
                     frappe.throw(f"Target field '{target_field}' does not exist in child table {target_child_doctype}")
             
     def _validate_field_exists(self, doctype, field_path, field_type):
-
+        """Validate that a field exists in the doctype, handling child tables"""
         if field_path == "name":
             return True
-        """Validate that a field exists in the doctype, handling child tables"""
+            
         # Check if this is a child table field
         if "." in field_path:
             # Parse the field path
@@ -116,23 +119,488 @@ class LiveSync(Document):
         """Prevent infinite loops with bidirectional syncs"""
         if not self.bidirectional:
             return
-            
+
         # Skip for new documents
         if self.is_new():
             return
-            
+
         # Check for circular reference
-        existing_syncs = frappe.get_all(
-            "Live Sync",
-            filters={
-                "source_doctype": self.target_doctype,
-                "target_doctype": self.source_doctype,
-                "bidirectional": 1,
-                "enabled": 1,
-                "name": ["!=", self.name]
-            },
-            fields=["name"]
-        )
+        try:
+            existing_syncs = frappe.get_all(
+                "Live Sync",
+                filters={
+                    "source_doctype": self.target_doctype,
+                    "target_doctype": self.source_doctype,
+                    "bidirectional": 1,
+                    "enabled": 1,
+                    "name": ["!=", self.name]
+                }
+            )  # <-- Closing parenthesis added here
+
+            if existing_syncs:
+                frappe.throw(f"Circular reference detected with existing sync: {existing_syncs[0].name}")
+        except Exception as e:
+            frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
+            return {"success": False, "message": str(e)}
+            
+    @frappe.whitelist()
+    def trigger_sync_for_document(self, doctype, docname, fast_mode=0):
+        """Manually trigger sync for a document"""
+        try:
+            # Load the document
+            doc = frappe.get_doc(doctype, docname)
+            
+            # Determine direction
+            is_forward = (doctype == self.source_doctype)
+            
+            if cint(fast_mode):
+                # Fast mode processing using direct SQL (completely bypassing all validations)
+                target_doctype = self.target_doctype if is_forward else self.source_doctype
+                result = self._process_fast_sync(doc, is_forward, target_doctype)
+                return {
+                    "success": True,
+                    "message": f"Fast sync completed for {doctype} {docname}{result}"
+                }
+            else:
+                # Standard sync processing
+                self.sync_document(doc, "on_update", is_forward)
+                
+                # Get target doc info for confirmation
+                target_info = ""
+                target_doctype = self.target_doctype if is_forward else self.source_doctype
+                target_doc = self.find_matching_document(doc, is_forward)
+                
+                if target_doc:
+                    target_info = f" - Updated {target_doctype} {target_doc.name}"
+                
+                return {
+                    "success": True,
+                    "message": f"Sync triggered for {doctype} {docname}{target_info}"
+                }
+        except Exception as e:
+            frappe.log_error(f"Manual sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Manual Error")
+            return {"success": False, "message": str(e)}
+
+    def _process_fast_sync(self, source_doc, is_forward, target_doctype):
+        """
+        Process a single document sync in fast mode using direct SQL operations
+        to completely bypass all validations and hooks.
+        
+        Args:
+            source_doc: Source document to sync
+            is_forward: Direction of sync 
+            target_doctype: Target DocType
+            
+        Returns:
+            String with result information
+        """
+        # Get field mappings based on direction
+        field_mappings = self.config.get("direct_fields", {})
+        if not is_forward:
+            # Invert mappings for reverse direction
+            field_mappings = {v: k for k, v in field_mappings.items()}
+            
+        # In Frappe, table names are always "tab" + DocType name
+        target_table = f"tab{target_doctype}"
+        
+        # Try to find target document using identifier mappings
+        identifier_mapping = self.config.get("identifier_mapping", {})
+        if not identifier_mapping:
+            # Fallback to first field mapping
+            if field_mappings:
+                first_src, first_tgt = next(iter(field_mappings.items()))
+                identifier_mapping = {first_src: first_tgt}
+            
+        # Adjust for direction
+        if not is_forward:
+            identifier_mapping = {v: k for k, v in identifier_mapping.items()}
+        
+        # Build WHERE clause for finding target
+        where_conditions = []
+        where_values = []
+        
+        for src_field, tgt_field in identifier_mapping.items():
+            src_value = None
+            if src_field == "name":
+                src_value = source_doc.name
+            elif "." not in src_field:  # Skip hierarchical fields
+                src_value = source_doc.get(src_field)
+                
+            if src_value is not None:
+                where_conditions.append(f"`{tgt_field}` = %s")
+                where_values.append(src_value)
+                
+        # If no conditions, try using name
+        if not where_conditions:
+            where_conditions.append("`name` = %s")
+            where_values.append(source_doc.name)
+            
+        # Build WHERE clause
+        where_clause = " AND ".join(where_conditions)
+        
+        # Check if target exists using direct SQL
+        target_exists = False
+        target_name = None
+        
+        # Query for existing record
+        if where_clause:
+            sql_query = f"SELECT name FROM `{target_table}` WHERE {where_clause} LIMIT 1"
+            result = frappe.db.sql(sql_query, tuple(where_values), as_dict=1)
+            
+            if result:
+                target_exists = True
+                target_name = result[0].name
+        
+        # Prepare update data - only include non-null values
+        update_fields = []
+        update_values = []
+        
+        for src_field, tgt_field in field_mappings.items():
+            if "." not in src_field:  # Skip hierarchical fields in fast mode
+                src_value = source_doc.get(src_field)
+                if src_value is not None:
+                    update_fields.append(tgt_field)
+                    update_values.append(src_value)
+        
+        # Additional required fields for new documents
+        if not target_exists:
+            # Add standard fields needed for new record
+            if "docstatus" not in update_fields:
+                update_fields.append("docstatus")
+                update_values.append(0)  # Default docstatus is 0 (Draft)
+                
+            if "owner" not in update_fields:
+                update_fields.append("owner")
+                update_values.append(frappe.session.user)
+                
+            if "modified_by" not in update_fields:
+                update_fields.append("modified_by")
+                update_values.append(frappe.session.user)
+                
+            if "creation" not in update_fields:
+                update_fields.append("creation")
+                update_values.append(frappe.utils.now())
+                
+            if "modified" not in update_fields:
+                update_fields.append("modified")
+                update_values.append(frappe.utils.now())
+                
+            # Generate name if not provided
+            if "name" not in update_fields:
+                # Generate a unique ID for name
+                target_name = frappe.generate_hash(length=10)
+                update_fields.append("name")
+                update_values.append(target_name)
+        
+        # Execute SQL operation - either UPDATE or INSERT
+        if target_exists:
+            # UPDATE existing record
+            if update_fields:
+                # Add modified field
+                if "modified" not in update_fields:
+                    update_fields.append("modified")
+                    update_values.append(frappe.utils.now())
+                    
+                if "modified_by" not in update_fields:
+                    update_fields.append("modified_by")
+                    update_values.append(frappe.session.user)
+                    
+                # Build SET clause
+                set_clause = ", ".join([f"`{field}` = %s" for field in update_fields])
+                
+                # Execute UPDATE
+                sql_query = f"UPDATE `{target_table}` SET {set_clause} WHERE name = %s"
+                frappe.db.sql(sql_query, tuple(update_values + [target_name]))
+                result = f" - Updated {target_doctype} {target_name} using direct SQL (fast mode)"
+        else:
+            # INSERT new record
+            fields_list = ", ".join([f"`{field}`" for field in update_fields])
+            values_placeholder = ", ".join(["%s" for _ in update_fields])
+            
+            # Execute INSERT
+            sql_query = f"INSERT INTO `{target_table}` ({fields_list}) VALUES ({values_placeholder})"
+            frappe.db.sql(sql_query, tuple(update_values))
+            result = f" - Created new {target_doctype} {target_name} using direct SQL (fast mode)"
+        
+        # Commit changes immediately
+        frappe.db.commit()
+        
+        # Log the sync
+        if self.enable_logging:
+            frappe.get_doc({
+                "doctype": "Sync Log",
+                "sync_configuration": self.name,
+                "timestamp": frappe.utils.now_datetime(),
+                "source_doctype": source_doc.doctype,
+                "source_doc": source_doc.name,
+                "target_doctype": target_doctype,
+                "target_doc": target_name,
+                "status": "Success",
+                "direction": "Forward" if is_forward else "Backward",
+                "event": "Fast SQL Sync",
+                "user": frappe.session.user
+            }).insert(ignore_permissions=True)
+        
+        return result
+        
+    @frappe.whitelist()
+    def trigger_bulk_sync(self, source_doctype=None, filters=None, limit=100, fast_mode=False):
+        """
+        Trigger bulk sync with fast mode option
+        
+        Args:
+            source_doctype: DocType to sync from
+            filters: Dictionary of filters to apply
+            limit: Maximum number of documents to process
+            fast_mode: If True, bypasses validations and hooks for performance
+        """
+        try:
+            # Determine direction
+            if not source_doctype:
+                source_doctype = self.source_doctype
+            is_forward = (source_doctype == self.source_doctype)
+
+            # Parse filters
+            if isinstance(filters, str):
+                filters = json.loads(filters)
+            filters = filters or {}
+
+            # Apply delta filter
+            last_key = 'last_synced_forward' if is_forward else 'last_synced_backward'
+            last_sync = getattr(self, last_key, None)
+            if last_sync:
+                filters['modified'] = ['>', last_sync]
+
+            # Fetch docs - only names and modified for efficiency
+            docs = frappe.get_all(
+                source_doctype,
+                filters=filters,
+                limit=int(limit),
+                fields=["name", "modified"],
+                order_by="modified ASC"
+            )
+            
+            if not docs:
+                return {'success': False,
+                        'message': f'No documents found matching filters in {source_doctype}'}
+
+            # Generate job ID for larger batches
+            job_id = f"bulk_sync_{uuid.uuid4().hex[:8]}"
+            
+            # For larger batches (>10 docs), use background processing
+            if len(docs) > 10:
+                # Store job information in cache
+                job_data = {
+                    "total": len(docs),
+                    "processed": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "status": "Queued",
+                    "start_time": frappe.utils.now(),
+                    "sync_config": self.name,
+                    "source_doctype": source_doctype,
+                    "direction": "Forward" if is_forward else "Backward",
+                    "fast_mode": cint(fast_mode)
+                }
+                
+                # Set cache with single operation
+                frappe.cache().set_value(f"bs:{job_id}", json.dumps(job_data), expires_in_sec=3600)
+
+                # Queue background job
+                enqueue(
+                    'core.sync_handler.process_bulk_sync',
+                    queue='long',
+                    timeout=3600,
+                    sync_config=self.name,
+                    source_doctype=source_doctype,
+                    doc_names=[d.name for d in docs],
+                    is_forward=is_forward,
+                    job_id=job_id,
+                    fast_mode=cint(fast_mode),
+                    now=False
+                )
+
+                return {
+                    'success': True,
+                    'message': f'Bulk sync of {len(docs)} documents queued as job {job_id}.',
+                    'job_id': job_id,
+                    'total_docs': len(docs)
+                }
+
+            # For smaller batches, process directly
+            processed, succeeded, failed = 0, 0, 0
+            details = []
+            
+            # Fast mode implementation - direct DB operations
+            if cint(fast_mode):
+                # Process using direct DB operations
+                results = self._process_bulk_sync_fast_mode(
+                    source_doctype, [d.name for d in docs], is_forward
+                )
+                
+                return {
+                    'success': True,
+                    'message': f'Fast mode processed {results["succeeded"]} docs successfully, {results["failed"]} failed',
+                    'results': results
+                }
+            
+            # Standard mode - process with full ORM
+            for doc_name in [d.name for d in docs]:
+                try:
+                    # Get full document
+                    doc = frappe.get_doc(source_doctype, doc_name)
+                    
+                    # Process sync
+                    self.sync_document(doc, "on_update", is_forward)
+                    
+                    succeeded += 1
+                    details.append({"name": doc_name, "status": "Success"})
+                except Exception as e:
+                    failed += 1
+                    details.append({"name": doc_name, "status": "Failed", "error": str(e)})
+                    frappe.log_error(
+                        f"Error syncing {source_doctype} {doc_name}: {str(e)}",
+                        "Bulk Sync Error"
+                    )
+                
+                processed += 1
+                
+            # Update last sync timestamp
+            now = frappe.utils.now_datetime()
+            setattr(self, last_key, now)
+            self.db_set(last_key, now, update_modified=False)
+            
+            # Return results
+            results = {
+                'total': len(docs),
+                'processed': processed,
+                'succeeded': succeeded,
+                'failed': failed,
+                'details': details
+            }
+            
+            return {
+                'success': True,
+                'message': f'Processed {processed} docs: {succeeded} succeeded, {failed} failed',
+                'results': results
+            }
+
+        except Exception as e:
+            frappe.log_error(f'Bulk sync error: {str(e)}\n{traceback.format_exc()}', 'LiveSync Bulk Error')
+            return {'success': False, 'message': str(e)}
+            
+    def _process_bulk_sync_fast_mode(self, source_doctype, doc_names, is_forward):
+        """
+        Process bulk sync in fast mode using direct DB operations
+        
+        Args:
+            source_doctype: DocType to sync from
+            doc_names: List of document names to process
+            is_forward: Direction of sync
+            
+        Returns:
+            Dictionary with results
+        """
+        processed = 0
+        succeeded = 0
+        failed = 0
+        details = []
+        
+        # Determine target doctype
+        target_doctype = self.target_doctype if is_forward else self.source_doctype
+        
+        # Get field mappings based on direction
+        field_mappings = self.config.get("direct_fields", {})
+        if not is_forward:
+            # Invert mappings for reverse direction
+            field_mappings = {v: k for k, v in field_mappings.items()}
+            
+        # Process in batches of 50 for better performance
+        batch_size = 50
+        for i in range(0, len(doc_names), batch_size):
+            batch = doc_names[i:i+batch_size]
+            batch_data = {}
+            
+            # Fetch source documents in batch
+            source_docs = frappe.get_all(
+                source_doctype,
+                filters={"name": ["in", batch]},
+                fields=["name"] + list(field_mappings.keys())
+            )
+            
+            for source_doc in source_docs:
+                try:
+                    # Find target document
+                    target_filters = {}
+                    
+                    # Use identifier mapping if available
+                    identifier_mapping = self.config.get("identifier_mapping", {})
+                    if not identifier_mapping:
+                        # Fallback to first field mapping
+                        first_src, first_tgt = next(iter(field_mappings.items()))
+                        identifier_mapping = {first_src: first_tgt}
+                        
+                    # Adjust for direction
+                    if not is_forward:
+                        identifier_mapping = {v: k for k, v in identifier_mapping.items()}
+                    
+                    # Build target filters
+                    for src_field, tgt_field in identifier_mapping.items():
+                        if hasattr(source_doc, src_field) and source_doc.get(src_field):
+                            target_filters[tgt_field] = source_doc.get(src_field)
+                            
+                    # If no filters, try using name
+                    if not target_filters:
+                        target_filters["name"] = source_doc.name
+                        
+                    # Check if target exists
+                    target_exists = frappe.db.exists(target_doctype, target_filters)
+                    
+                    # Prepare update data
+                    update_data = {}
+                    for src_field, tgt_field in field_mappings.items():
+                        if hasattr(source_doc, src_field) and source_doc.get(src_field) is not None:
+                            update_data[tgt_field] = source_doc.get(src_field)
+                            
+                    # No child tables in fast mode
+                    
+                    if target_exists:
+                        # Update existing document using db_set
+                        for field, value in update_data.items():
+                            frappe.db.set_value(target_doctype, target_filters, field, value)
+                    else:
+                        # Create new document directly in DB
+                        update_data["doctype"] = target_doctype
+                        new_doc = frappe.get_doc(update_data)
+                        new_doc.insert(ignore_permissions=True)
+                        
+                    # Success
+                    succeeded += 1
+                    details.append({"name": source_doc.name, "status": "Success"})
+                        
+                except Exception as e:
+                    # Failed
+                    failed += 1
+                    details.append({"name": source_doc.name, "status": "Failed", "error": str(e)})
+                    
+                processed += 1
+                
+            # Commit after each batch
+            frappe.db.commit()
+        
+        # Update last sync timestamp
+        last_key = 'last_synced_forward' if is_forward else 'last_synced_backward'
+        now = frappe.utils.now_datetime()
+        self.db_set(last_key, now, update_modified=False)
+        
+        # Return results
+        return {
+            'total': len(doc_names),
+            'processed': processed,
+            'succeeded': succeeded,
+            'failed': failed,
+            'details': details
+        }
         
         if existing_syncs:
             frappe.throw(f"Circular reference detected with existing sync: {existing_syncs[0].name}")
@@ -142,7 +610,7 @@ class LiveSync(Document):
         self.clear_sync_cache()
         
     def clear_sync_cache(self):
-        """Clear all sync cache"""
+        """Clear sync cache for affected doctypes"""
         # Clear cache for source doctype
         frappe.cache().delete_value(f"sync_configs_for_{self.source_doctype}")
         
@@ -151,7 +619,7 @@ class LiveSync(Document):
             frappe.cache().delete_value(f"sync_configs_for_{self.target_doctype}")
             
     def find_matching_document(self, source_doc, is_forward=True):
-        
+        """Find matching document in target doctype efficiently"""
         # Determine source and target doctypes based on direction
         if is_forward:
             source_doctype = self.source_doctype
@@ -169,7 +637,8 @@ class LiveSync(Document):
                 first_src, first_tgt = next(iter(field_mappings.items()))
                 identifier_mapping = {first_src: first_tgt}
         
-        # Try each identifier mapping
+        # Build filters for query
+        filters = []
         for src_field, tgt_field in identifier_mapping.items():
             # Adjust fields based on direction
             if is_forward:
@@ -177,35 +646,39 @@ class LiveSync(Document):
             else:
                 source_field, target_field = tgt_field, src_field
             
+            # Skip hierarchical fields in main filter
+            if "." in source_field or "." in target_field:
+                continue
+                
             # Get source value - special handling for 'name'
             source_value = None
             if source_field == "name":
                 source_value = source_doc.name
-            elif "." in source_field:
-                source_value = self._get_hierarchical_field_value(source_doc, source_field)
             else:
                 source_value = source_doc.get(source_field)
             
             # Skip if no value
             if source_value is None:
                 continue
-            
-            # Query for matching document - special handling for 'name'
-            if target_field == "name":
-                # Direct lookup by name
-                if frappe.db.exists(target_doctype, source_value):
-                    return frappe.get_doc(target_doctype, source_value)
-            elif "." not in target_field:  # Can only query non-hierarchical fields directly
-                filters = {target_field: source_value}
-                target_docs = frappe.get_all(
-                    target_doctype,
-                    filters=filters,
-                    fields=["name"],
-                    limit=1
-                )
                 
-                if target_docs:
-                    return frappe.get_doc(target_doctype, target_docs[0].name)
+            # Add to filters
+            filters.append([target_doctype, target_field, "=", source_value])
+        
+        # Perform query if we have filters
+        if filters:
+            # Use OR for multiple filters
+            if len(filters) > 1:
+                filters = [["OR"] + filters]
+                
+            target_docs = frappe.get_all(
+                target_doctype,
+                filters=filters,
+                fields=["name"],
+                limit=1
+            )
+            
+            if target_docs:
+                return frappe.get_doc(target_doctype, target_docs[0].name)
         
         # Additional fallback: check for document with matching name
         if frappe.db.exists(target_doctype, source_doc.name):
@@ -214,134 +687,126 @@ class LiveSync(Document):
         # No match found
         return None
             
+    @frappe.whitelist()
     def sync_document(self, doc, event, is_forward=True):
-        """Sync document based on event type"""
-        # Skip if document is already being synced
-        if hasattr(doc, "_syncing") and doc._syncing:
+        """
+        Core sync entrypoint: called on insert/update or via Test Sync.
+        Optimized for better performance with early filtering.
+        """
+        # Skip if already syncing or not enabled
+        if getattr(doc, "_syncing", False) or not self.enabled:
             return
-            
-        # Skip if sync is disabled
-        if not self.enabled:
-            return
-            
-        # For bidirectional check, skip if not bidirectional and not forward direction
-        if not is_forward and not self.bidirectional:
-            return
-            
-        # Set up source and target doctypes based on direction
-        if is_forward:
-            source_doctype = self.source_doctype
-            target_doctype = self.target_doctype
-        else:
-            source_doctype = self.target_doctype
-            target_doctype = self.source_doctype
-            
-        # Make sure doc is from the correct doctype
-        if doc.doctype != source_doctype:
-            return
-                
-        # Debug log
-        frappe.log_error(
-            f"Syncing {doc.doctype} {doc.name}, child tables: {[table for table in doc.__dict__ if isinstance(doc.get(table), list) and len(doc.get(table)) > 0]}",
-            "LiveSync Debug"
-        )
-        
-        # Mark document as being synced to prevent loops
-        doc._syncing = True
-        
-        try:
-            if event in ["after_insert", "on_update", "after_update"]:
-                # Handle creation or update
-                self._handle_insert_or_update(doc, event, is_forward)
-            elif event in ["on_trash", "after_delete"]:
-                # Handle deletion
-                self._handle_delete(doc, is_forward)
-        except Exception as e:
-            frappe.log_error(
-                f"Sync error for {doc.doctype} {doc.name}: {str(e)}\n{traceback.format_exc()}",
-                "LiveSync Error"
-            )
-        finally:
-            # Clear syncing flag
-            doc._syncing = False
-            
-    def _handle_insert_or_update(self, doc, event, is_forward=True):
-        """Handle document insertion or update"""
-        # Execute before_sync hook if defined
-        if self.config.get("hooks", {}).get("before_sync"):
-            self._execute_hook(self.config["hooks"]["before_sync"], doc, is_forward)
-        
-        # Find matching document
-        target_doc = self.find_matching_document(doc, is_forward)
-        
-        if target_doc:
-            # Update existing document
-            target_doc._syncing = True
-            
-            # First process hierarchical field mappings to ensure they happen before any
-            # potential child table replacements
-            self._process_field_mappings(doc, target_doc, is_forward)
-            
-            # Then process traditional child table mappings (only if there are specific child_mappings)
-            if self.config.get("child_mappings"):
-                self._process_child_tables(doc, target_doc, is_forward)
-            
-            # Save target document
-            target_doc.save(ignore_permissions=True)
-            
-            # Execute after_sync hook if defined
-            if self.config.get("hooks", {}).get("after_sync"):
-                self._execute_hook(self.config["hooks"]["after_sync"], doc, is_forward, target_doc)
-            
-            self._log_sync(doc, target_doc, "update", is_forward)
-        else:
-            # Create new document
-            target_doctype = self.target_doctype if is_forward else self.source_doctype
-            new_doc = frappe.new_doc(target_doctype)
-            new_doc._syncing = True
-            
-            # Process field mappings
-            self._process_field_mappings(doc, new_doc, is_forward)
-            
-            # Process traditional child table mappings
-            if self.config.get("child_mappings"):
-                self._process_child_tables(doc, new_doc, is_forward)
-            
-            # Insert new document
-            new_doc.insert(ignore_permissions=True)
-            
-            # Execute after_sync hook if defined
-            if self.config.get("hooks", {}).get("after_sync"):
-                self._execute_hook(self.config["hooks"]["after_sync"], doc, is_forward, new_doc)
-            
-            self._log_sync(doc, new_doc, "insert", is_forward)
 
-    def _execute_hook(self, hook_name, source_doc, is_forward, target_doc=None):
-        """Execute a custom hook function"""
+        # Handle deletion separately (no need to reload)
+        if event == "on_trash":
+            self._handle_delete(doc, is_forward)
+            return
+        
+        # Skip if source doesn't match conditions
+        if not self._check_sync_conditions(doc, is_forward):
+            return
+            
+        # Determine target doctype
+        target_doctype = self.target_doctype if is_forward else self.source_doctype
+
+        # Before sync hook
+        if self.config.get("hooks", {}).get("before_sync"):
+            hook_name = self.config["hooks"]["before_sync"]
+            try:
+                hook = frappe.get_attr(hook_name)
+                hook(doc, is_forward, self)
+            except Exception as e:
+                frappe.log_error(f"Error in before_sync hook: {str(e)}", "LiveSync Hook Error")
+
+        # Find target efficiently
+        target_doc = self.find_matching_document(doc, is_forward)
+        if not target_doc:
+            target_doc = frappe.new_doc(target_doctype)
+
+        # Prevent loops, mark syncing
+        target_doc._syncing = True
+
         try:
-            if "." in hook_name:
-                # Module and function specified (e.g., "mymodule.myfunction")
-                module_name, function_name = hook_name.rsplit(".", 1)
-                module = frappe.get_module(module_name)
-                if hasattr(module, function_name):
-                    hook_function = getattr(module, function_name)
-                    if target_doc:
-                        hook_function(source_doc, target_doc, is_forward, self)
-                    else:
-                        hook_function(source_doc, is_forward, self)
-            else:
-                # Global function
-                if frappe.get_attr(hook_name):
-                    hook_function = frappe.get_attr(hook_name)
-                    if target_doc:
-                        hook_function(source_doc, target_doc, is_forward, self)
-                    else:
-                        hook_function(source_doc, is_forward, self)
-        except Exception as e:
-            frappe.log_error(
-                f"Error executing hook {hook_name}: {str(e)}\n{frappe.get_traceback()}",
-                "LiveSync Hook Error"
-            )
+            # Process fields and save
+            self._handle_insert_or_update(doc, event, is_forward, target_doc)
+        finally:
+            target_doc._syncing = False
+            
+    def _check_sync_conditions(self, doc, is_forward):
+        """Quick check if doc meets sync conditions"""
+        conditions = self.config.get("conditions", {})
+        if not conditions:
+            return True
+            
+        # Get skip conditions
+        skip_if = conditions.get("skip_if", [])
+        
+        # Check skip conditions first (early exit)
+        for condition in skip_if:
+            if len(condition) != 3:
+                continue
+                
+            field, op, value = condition
+            doc_val = doc.get(field)
+            
+            if op == "==" and doc_val == value:
+                return False
+            elif op == "!=" and doc_val != value:
+                return False
+            elif op == "in" and doc_val in value:
+                return False
+            elif op == "not in" and doc_val not in value:
+                return False
+                
+        # Check required conditions
+        only_if = conditions.get("only_if", [])
+        for condition in only_if:
+            if len(condition) != 3:
+                continue
+                
+            field, op, value = condition
+            doc_val = doc.get(field)
+            
+            if op == "==" and doc_val != value:
+                return False
+            elif op == "!=" and doc_val == value:
+                return False
+            elif op == "in" and doc_val not in value:
+                return False
+            elif op == "not in" and doc_val in value:
+                return False
+                
+        return True
+            
+    def _handle_insert_or_update(self, source_doc, event, is_forward, target_doc):
+        """
+        Given a source_doc and target_doc, map all fields & child tables, then save.
+        """
+        # 1) Field mappings
+        self._process_field_mappings(source_doc, target_doc, is_forward)
+
+        # 2) Child-table mappings
+        self._process_child_tables(source_doc, target_doc, is_forward)
+
+        # 3) Save or insert
+        if target_doc.get("__islocal"):
+            target_doc.insert(ignore_permissions=True)
+            action = "Insert"
+        else:
+            target_doc.save(ignore_permissions=True)
+            action = "Update"
+
+        # 4) Hooks after sync
+        if self.config.get("hooks", {}).get("after_sync"):
+            hook_name = self.config["hooks"]["after_sync"]
+            try:
+                hook = frappe.get_attr(hook_name)
+                hook(source_doc, target_doc, is_forward, self)
+            except Exception as e:
+                frappe.log_error(f"Error in after_sync hook: {str(e)}", "LiveSync Hook Error")
+
+        # 5) Log it
+        self._log_sync(source_doc, target_doc, action, is_forward)
 
     def _apply_transform(self, field_name, value, doc):
         """Apply transformation to a field value"""
@@ -351,21 +816,11 @@ class LiveSync(Document):
             transform_name = transform_config[field_name]
             
             try:
-                if "." in transform_name:
-                    # Module and function specified (e.g., "mymodule.myfunction")
-                    module_name, function_name = transform_name.rsplit(".", 1)
-                    module = frappe.get_module(module_name)
-                    if hasattr(module, function_name):
-                        transform_function = getattr(module, function_name)
-                        return transform_function(value, doc)
-                else:
-                    # Global function
-                    if frappe.get_attr(transform_name):
-                        transform_function = frappe.get_attr(transform_name)
-                        return transform_function(value, doc)
+                transform_function = frappe.get_attr(transform_name)
+                return transform_function(value, doc)
             except Exception as e:
                 frappe.log_error(
-                    f"Error applying transform {transform_name} to {field_name}: {str(e)}\n{frappe.get_traceback()}",
+                    f"Error applying transform {transform_name} to {field_name}: {str(e)}",
                     "LiveSync Transform Error"
                 )
                 
@@ -388,23 +843,23 @@ class LiveSync(Document):
         if delete_action == "Delete":
             # Delete target document
             target_doc.delete(ignore_permissions=True)
-            self._log_sync(doc, target_doc, "delete", is_forward)
+            self._log_sync(doc, target_doc, "Delete", is_forward)
         elif delete_action == "Archive":
             # Set status to archived
             if hasattr(target_doc, "status"):
                 target_doc.status = "Archived"
                 target_doc.save(ignore_permissions=True)
-                self._log_sync(doc, target_doc, "archive", is_forward)
+                self._log_sync(doc, target_doc, "Archive", is_forward)
         elif delete_action == "Set Field" and hasattr(self, "on_delete_field"):
             # Set specified field to mark as deleted
             field_name = self.on_delete_field
             if hasattr(target_doc, field_name):
                 target_doc.set(field_name, 1)
                 target_doc.save(ignore_permissions=True)
-                self._log_sync(doc, target_doc, "set_field", is_forward)
+                self._log_sync(doc, target_doc, "Set Field", is_forward)
                 
     def _process_child_tables(self, source_doc, target_doc, is_forward=True):
-        """Process child table mappings"""
+        """Process child table mappings efficiently"""
         child_mappings = self.config.get("child_mappings", [])
         if not child_mappings:
             return
@@ -423,18 +878,10 @@ class LiveSync(Document):
                 
             # Skip if required fields are missing
             if not source_table or not target_table or not fields:
-                frappe.log_error(
-                    f"Missing required fields in child mapping: {mapping}",
-                    "LiveSync Error"
-                )
                 continue
                 
             # Check if source table exists in source document
             if not hasattr(source_doc, source_table):
-                frappe.log_error(
-                    f"Source document {source_doc.doctype} {source_doc.name} doesn't have child table '{source_table}'",
-                    "LiveSync Error"
-                )
                 continue
                 
             # Get source rows
@@ -443,95 +890,29 @@ class LiveSync(Document):
             # Get target child table doctype
             try:
                 child_doctype = frappe.get_meta(target_doc.doctype).get_field(target_table).options
-            except Exception as e:
-                frappe.log_error(
-                    f"Error getting child table doctype: {str(e)}",
-                    "LiveSync Error"
-                )
+            except Exception:
                 continue
                 
             # Create target rows
             target_rows = []
             for source_row in source_rows:
                 # Create a new row
-                row_dict = {"doctype": child_doctype}
+                row_dict = {"doctype": child_doctype, "parentfield": target_table}
                 
-                # Map fields
+                # Map fields efficiently
                 for src_field, tgt_field in fields.items():
-                    if hasattr(source_row, src_field):
-                        row_dict[tgt_field] = source_row.get(src_field)
-                    else:
-                        # Try dict access if attribute access fails
-                        try:
-                            row_dict[tgt_field] = source_row[src_field]
-                        except (KeyError, TypeError):
-                            frappe.log_error(
-                                f"Source field {src_field} not found in row of {source_table}",
-                                "LiveSync Error"
-                            )
+                    source_value = getattr(source_row, src_field, None)
+                    if source_value is None and hasattr(source_row, "get"):
+                        source_value = source_row.get(src_field)
+                        
+                    if source_value is not None:
+                        row_dict[tgt_field] = source_value
                 
                 # Add the row
                 target_rows.append(row_dict)
             
-            # Remove all existing rows and add new ones
-            target_doc.set(target_table, [])
-            
-            # Add the new rows
-            for row in target_rows:
-                target_doc.append(target_table, row)
-            
-            frappe.log_error(
-                f"Processed {len(source_rows)} rows from {source_table} to {target_table}",
-                "LiveSync Debug"
-            )
-                
-    def _update_child_rows(self, source_rows, target_doc, target_table, target_doctype, 
-                        field_mappings, key_field, source_key_field):
-        """Update child rows based on key field"""
-        # Get existing target rows
-        existing_rows = {row.get(key_field): row for row in target_doc.get(target_table, [])}
-        new_rows = []
-        
-        for source_row in source_rows:
-            source_key_value = source_row.get(source_key_field)
-            if not source_key_value:
-                continue
-                
-            if source_key_value in existing_rows:
-                # Update existing row
-                target_row = existing_rows[source_key_value]
-                for source_field, target_field in field_mappings.items():
-                    if hasattr(source_row, source_field):
-                        target_row.set(target_field, source_row.get(source_field))
-                new_rows.append(target_row)
-            else:
-                # Create new row
-                target_row = frappe.new_doc(target_doctype)
-                target_row.doctype = target_doctype
-                for source_field, target_field in field_mappings.items():
-                    if hasattr(source_row, source_field):
-                        target_row.set(target_field, source_row.get(source_field))
-                new_rows.append(target_row)
-                
-        # Update the target document with the updated/new rows
-        target_doc.set(target_table, new_rows)
-            
-    def _replace_child_rows(self, source_rows, target_doc, target_table, target_doctype, field_mappings):
-        """Replace all child rows"""
-        new_rows = []
-        
-        for source_row in source_rows:
-            target_row = frappe.new_doc(target_doctype)
-            target_row.doctype = target_doctype
-            
-            for source_field, target_field in field_mappings.items():
-                if hasattr(source_row, source_field):
-                    target_row.set(target_field, source_row.get(source_field))
-                    
-            new_rows.append(target_row)
-            
-        # Replace all rows in the target document
-        target_doc.set(target_table, new_rows)
+            # Replace all rows in one operation
+            target_doc.set(target_table, target_rows)
             
     def _log_sync(self, source_doc, target_doc, action, is_forward):
         """Log synchronization action"""
@@ -550,10 +931,189 @@ class LiveSync(Document):
             "target_doc": target_doc.name,
             "status": "Success",
             "direction": direction,
-            "event": action.capitalize(),
+            "event": action,
             "user": frappe.session.user
         }).insert(ignore_permissions=True)
         
+    def _process_field_mappings(self, source_doc, target_doc, is_forward=True):
+        """Process all field mappings with optimization for standard fields"""
+        # Build a batch of standard field updates
+        updates = {}
+        
+        # Process identifier mapping
+        identifier_mapping = self.config.get("identifier_mapping", {})
+        if identifier_mapping:
+            for src_field, tgt_field in identifier_mapping.items():
+                # Adjust fields based on direction
+                if is_forward:
+                    source_field, target_field = src_field, tgt_field
+                else:
+                    source_field, target_field = tgt_field, src_field
+                
+                # Skip hierarchical fields for standard updates
+                if "." in source_field or "." in target_field:
+                    continue
+                    
+                # Get and update value
+                source_value = source_doc.get(source_field)
+                if source_value is not None:
+                    updates[target_field] = source_value
+        
+        # Process regular field mappings (standard fields)
+        field_mappings = self.config.get("direct_fields", {})
+        for src_field, tgt_field in field_mappings.items():
+            # Adjust fields based on direction
+            if is_forward:
+                source_field, target_field = src_field, tgt_field
+            else:
+                source_field, target_field = tgt_field, src_field
+            
+            # Skip hierarchical fields for standard updates
+            if "." in source_field or "." in target_field:
+                continue
+                
+            # Get value and apply transforms
+            source_value = source_doc.get(source_field)
+            if source_value is not None:
+                # Apply transform if configured
+                transform_config = self.config.get("transform", {})
+                if source_field in transform_config:
+                    source_value = self._apply_transform(source_field, source_value, source_doc)
+                    
+                updates[target_field] = source_value
+        
+        # Apply all standard field updates at once
+        for field, value in updates.items():
+            target_doc.set(field, value)
+        
+        # Process hierarchical fields in a second pass
+        for src_field, tgt_field in field_mappings.items():
+            # Adjust fields based on direction
+            if is_forward:
+                source_field, target_field = src_field, tgt_field
+            else:
+                source_field, target_field = tgt_field, src_field
+            
+            # Only process hierarchical fields
+            if "." in source_field or "." in target_field:
+                self._map_hierarchical_fields(source_doc, target_doc, source_field, target_field)
+    
+    def _map_hierarchical_fields(self, source_doc, target_doc, source_field, target_field):
+        """Map hierarchical fields (parent-child relationships)"""
+        # Handle different combinations of hierarchical fields
+        if "." in source_field and "." in target_field:
+            # Child to child mapping
+            source_value = self._get_hierarchical_field_value(source_doc, source_field)
+            if source_value is not None:
+                self._set_hierarchical_field_value(target_doc, target_field, source_value)
+        elif "." in source_field:
+            # Child to parent mapping
+            source_value = self._get_hierarchical_field_value(source_doc, source_field)
+            if source_value is not None:
+                target_doc.set(target_field, source_value)
+        elif "." in target_field:
+            # Parent to child mapping
+            source_value = source_doc.get(source_field)
+            if source_value is not None:
+                self._set_hierarchical_field_value(target_doc, target_field, source_value)
+                
+    def _get_hierarchical_field_value(self, doc, field_path):
+        """Get value from a hierarchical field path, supporting indexes"""
+        # Parse the field path
+        path_info = self._parse_table_reference(field_path)
+        table_name = path_info["table"]
+        field_name = path_info["field"]
+        index = path_info["index"]
+        
+        # Get the child table
+        child_table = doc.get(table_name, [])
+        if not child_table:
+            return None
+        
+        # Get the row based on index
+        if index is not None:
+            # Use specific index
+            if len(child_table) > index:
+                return child_table[index].get(field_name)
+            else:
+                return None
+        else:
+            # Use first row by default
+            return child_table[0].get(field_name) if child_table else None
+
+    def _set_hierarchical_field_value(self, doc, field_path, value):
+        """Set value in a hierarchical field path efficiently"""
+        # Parse the field path
+        path_info = self._parse_table_reference(field_path)
+        table_name = path_info["table"]
+        field_name = path_info["field"]
+        index = path_info["index"]
+        
+        # Make sure the table field exists in the doctype
+        meta = frappe.get_meta(doc.doctype)
+        table_field = meta.get_field(table_name)
+        if not table_field:
+            return
+
+        # Get the child doctype
+        child_doctype = table_field.options
+        
+        # Get existing child table
+        child_table = doc.get(table_name, [])
+        
+        # Determine which row to update or create
+        if index is not None:
+            # Specific index requested
+            while len(child_table) <= index:
+                # Create new rows until we reach the desired index
+                new_row = frappe.new_doc(child_doctype)
+                new_row.parentfield = table_name
+                child_table.append(new_row)
+            
+            # Update the specified row
+            child_table[index].set(field_name, value)
+        else:
+            # No index specified, use first row or create one
+            if not child_table:
+                # Create first row if table is empty
+                new_row = frappe.new_doc(child_doctype)
+                new_row.parentfield = table_name
+                new_row.set(field_name, value)
+                child_table.append(new_row)
+            else:
+                # Update existing first row
+                child_table[0].set(field_name, value)
+        
+        # Update the table in one operation
+        doc.set(table_name, child_table)
+
+    def _parse_table_reference(self, field_path):
+        """Parse a field path with potential index, like "details[0].field1" or "details.field1" """
+        import re
+        
+        # Split into table part and field part
+        parts = field_path.split(".")
+        if len(parts) != 2:
+            return {"table": field_path, "field": "", "index": None}
+        
+        table_part = parts[0]
+        field_part = parts[1]
+        
+        # Check for index notation like "details[0]"
+        index_match = re.match(r'(.+)\[(\d+)\]', table_part)
+        if index_match:
+            table_name = index_match.group(1)
+            index = int(index_match.group(2))
+        else:
+            table_name = table_part
+            index = None
+        
+        return {
+            "table": table_name,
+            "field": field_part,
+            "index": index
+        }
+                        
     @frappe.whitelist()
     def test_sync(self, source_doctype=None, source_name=None):
         """Test sync configuration with a sample document"""
@@ -585,7 +1145,7 @@ class LiveSync(Document):
                 
             for source_field, target_field in config_mappings.items():
                 # Get original value
-                source_value = source_doc.get(source_field)
+                source_value = source_doc.get(source_field) if "." not in source_field else self._get_hierarchical_field_value(source_doc, source_field)
                 
                 # Check if a transformation would be applied
                 transformed_value = source_value
@@ -601,6 +1161,29 @@ class LiveSync(Document):
                     "value": source_value,
                     "transform": transform_info
                 })
+            
+            # Check for hooks
+            hooks_info = {}
+            if self.config.get("hooks", {}).get("before_sync"):
+                hooks_info["before_sync"] = self.config["hooks"]["before_sync"]
+            if self.config.get("hooks", {}).get("after_sync"):
+                hooks_info["after_sync"] = self.config["hooks"]["after_sync"]
+            
+            # Return comprehensive test results
+            return {
+                "success": True,
+                "source_doc": source_name,
+                "source_doctype": source_doctype,
+                "target_exists": bool(target_doc),
+                "target_doc": target_doc.name if target_doc else None,
+                "target_doctype": self.target_doctype if is_forward else self.source_doctype,
+                "direction": "Forward" if is_forward else "Backward",
+                "field_mappings": field_mappings,
+                "child_mappings": child_mappings,
+                "hooks": hooks_info
+            }
+        
+        except Exception as e:
             
             # Set up child table mappings
             child_mappings = []
@@ -626,8 +1209,12 @@ class LiveSync(Document):
                 sample_data = {}
                 if row_count > 0:
                     for src_field, tgt_field in fields.items():
-                        if hasattr(source_rows[0], src_field):
-                            sample_data[src_field] = source_rows[0].get(src_field)
+                        sample_value = getattr(source_rows[0], src_field, None)
+                        if sample_value is None and hasattr(source_rows[0], "get"):
+                            sample_value = source_rows[0].get(src_field)
+                            
+                        if sample_value is not None:
+                            sample_data[src_field] = sample_value
                 
                 child_mappings.append({
                     "source_table": source_table,
@@ -636,903 +1223,3 @@ class LiveSync(Document):
                     "fields": fields,
                     "sample_data": sample_data
                 })
-            
-            # Check for hooks
-            hooks_info = {}
-            if self.config.get("hooks", {}).get("before_sync"):
-                hooks_info["before_sync"] = self.config["hooks"]["before_sync"]
-            if self.config.get("hooks", {}).get("after_sync"):
-                hooks_info["after_sync"] = self.config["hooks"]["after_sync"]
-            
-            # Return comprehensive test results
-            return {
-                "success": True,
-                "source_doc": source_name,
-                "source_doctype": source_doctype,
-                "target_exists": bool(target_doc),
-                "target_doc": target_doc.name if target_doc else None,
-                "target_doctype": self.target_doctype if is_forward else self.source_doctype,
-                "direction": "Forward" if is_forward else "Backward",
-                "field_mappings": field_mappings,
-                "child_mappings": child_mappings,
-                "hooks": hooks_info
-            }
-                    
-        except Exception as e:
-            frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
-            return {"success": False, "message": str(e)}
-            
-    @frappe.whitelist()
-    def trigger_sync_for_document(self, doctype, docname):
-        """Manually trigger sync for a document"""
-        try:
-            # Load the document with full details including child tables
-            doc = frappe.get_doc(doctype, docname)
-            
-            # Log initial state
-            frappe.log_error(
-                f"Triggering sync for {doctype} {docname}, child tables: {[table for table in doc.__dict__ if isinstance(doc.get(table), list) and len(doc.get(table)) > 0]}",
-                "LiveSync Debug"
-            )
-            
-            # Determine direction
-            is_forward = (doctype == self.source_doctype)
-            
-            # Process sync
-            self.sync_document(doc, "on_update", is_forward)
-            
-            # Get target doc info for confirmation
-            target_info = ""
-            if is_forward:
-                target_doctype = self.target_doctype
-            else:
-                target_doctype = self.source_doctype
-                
-            target_doc = self.find_matching_document(doc, is_forward)
-            if target_doc:
-                target_info = f" - Updated {target_doctype} {target_doc.name}"
-            
-            return {
-                "success": True,
-                "message": f"Sync triggered for {doctype} {docname}{target_info}"
-            }
-        except Exception as e:
-            frappe.log_error(f"Manual sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Manual Error")
-            return {"success": False, "message": str(e)}
-        
-    @frappe.whitelist()
-    def trigger_bulk_sync(self, source_doctype=None, filters=None, limit=100):
-        """Trigger bulk synchronization with optional filters"""
-        try:
-            # Default to source doctype if not specified
-            if not source_doctype:
-                source_doctype = self.source_doctype
-                
-            # Determine sync direction
-            is_forward = (source_doctype == self.source_doctype)
-            
-            # Parse filters if provided as string
-            if isinstance(filters, str):
-                filters = json.loads(filters)
-            
-            # Default to empty dict if no filters
-            if not filters:
-                filters = {}
-                
-            # Get documents matching filters
-            docs = frappe.get_all(
-                source_doctype,
-                filters=filters,
-                limit=limit,
-                fields=["name"]
-            )
-            
-            if not docs:
-                return {
-                    "success": False,
-                    "message": f"No documents found matching filters in {source_doctype}"
-                }
-            
-            # Generate a unique job ID for this sync operation
-            import uuid
-            job_id = f"bulk_sync_{uuid.uuid4().hex[:10]}"
-                    
-            # For larger sets, use a background job
-            if len(docs) > 10:
-                # Enqueue background job with the job_id
-                frappe.enqueue(
-                    'core.agnikul_core_erp.doctype.live_sync.live_sync.process_bulk_sync',
-                    queue='long',
-                    timeout=3600,
-                    sync_config=self.name,
-                    source_doctype=source_doctype,
-                    doc_names=[d.name for d in docs],
-                    is_forward=is_forward,
-                    job_id=job_id,
-                    now=False
-                )
-                
-                # Create an initial record in cache - one key at a time
-                cache_key = f"bulk_sync_job:{job_id}"
-                frappe.cache().set_value(f"{cache_key}:total", len(docs))
-                frappe.cache().set_value(f"{cache_key}:processed", 0)
-                frappe.cache().set_value(f"{cache_key}:succeeded", 0)
-                frappe.cache().set_value(f"{cache_key}:failed", 0)
-                frappe.cache().set_value(f"{cache_key}:status", "Queued")
-                frappe.cache().set_value(f"{cache_key}:start_time", frappe.utils.now())
-                frappe.cache().set_value(f"{cache_key}:sync_config", self.name)
-                frappe.cache().set_value(f"{cache_key}:source_doctype", source_doctype)
-                frappe.cache().set_value(f"{cache_key}:direction", "Forward" if is_forward else "Backward")
-                
-                return {
-                    "success": True,
-                    "message": f"Bulk sync of {len(docs)} documents has been queued as a background job.",
-                    "job_id": job_id,
-                    "total_docs": len(docs)
-                }
-            else:
-                # Process directly for smaller sets
-                results = {
-                    "total": len(docs),
-                    "processed": 0,
-                    "succeeded": 0,
-                    "failed": 0,
-                    "details": []
-                }
-                
-                for doc in docs:
-                    try:
-                        # Get full document
-                        source_doc = frappe.get_doc(source_doctype, doc.name)
-                        
-                        # Process sync
-                        self.sync_document(source_doc, "on_update", is_forward)
-                        
-                        results["succeeded"] += 1
-                        results["details"].append({
-                            "name": doc.name,
-                            "status": "Success"
-                        })
-                    except Exception as e:
-                        results["failed"] += 1
-                        results["details"].append({
-                            "name": doc.name,
-                            "status": "Failed",
-                            "error": str(e)
-                        })
-                    
-                    results["processed"] += 1
-                    
-                return {
-                    "success": True,
-                    "message": f"Processed {results['processed']} documents: {results['succeeded']} succeeded, {results['failed']} failed",
-                    "results": results
-                }
-        except Exception as e:
-            frappe.log_error(f"Bulk sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Bulk Error")
-            return {"success": False, "message": str(e)}    
-
-    def _process_field_mappings(self, source_doc, target_doc, is_forward=True):
-        """Process all field mappings with special handling for hierarchical fields"""
-        # Process identifier mapping first if available
-        identifier_mapping = self.config.get("identifier_mapping", {})
-        if identifier_mapping:
-            for src_field, tgt_field in identifier_mapping.items():
-                if is_forward:
-                    self._map_single_field(source_doc, target_doc, src_field, tgt_field)
-                else:
-                    # For reverse direction, swap source and target
-                    self._map_single_field(source_doc, target_doc, tgt_field, src_field)
-        
-        # Process regular field mappings
-        field_mappings = self.config.get("direct_fields", {})
-        
-        # First pass: Process regular field to regular field and child to parent mappings
-        for src_field, tgt_field in field_mappings.items():
-            # Skip parent to child mappings for now
-            if is_forward and "." in tgt_field and "." not in src_field:
-                continue
-            if not is_forward and "." in src_field and "." not in tgt_field:
-                continue
-                
-            if is_forward:
-                self._map_single_field(source_doc, target_doc, src_field, tgt_field)
-            else:
-                # For reverse direction, swap source and target
-                self._map_single_field(source_doc, target_doc, tgt_field, src_field)
-        
-        # Second pass: Process only parent to child mappings
-        # This ensures child tables are fully populated before we try to update specific fields
-        for src_field, tgt_field in field_mappings.items():
-            # Only handle parent to child mappings now
-            if is_forward and "." in tgt_field and "." not in src_field:
-                self._map_parent_to_child_field(source_doc, target_doc, src_field, tgt_field)
-            elif not is_forward and "." in src_field and "." not in tgt_field:
-                self._map_parent_to_child_field(source_doc, target_doc, tgt_field, src_field)
-
-    def _map_parent_to_child_field(self, source_doc, target_doc, parent_field, child_field_path):
-        """Special handling for mapping parent field to child field using direct DB update"""
-        # Get parent field value
-        parent_value = source_doc.get(parent_field)
-        if parent_value is None:
-            return  # Skip if no value
-            
-        # Parse the child field path
-        path_info = self._parse_table_reference(child_field_path)
-        table_name = path_info["table"]
-        field_name = path_info["field"]
-        index = path_info["index"]
-        
-        # Make sure the child table exists
-        meta = frappe.get_meta(target_doc.doctype)
-        table_field = meta.get_field(table_name)
-        if not table_field:
-            frappe.log_error(f"Table field {table_name} not found in {target_doc.doctype}", "Hierarchical Field Error")
-            return
-
-        # Get the child doctype
-        child_doctype = table_field.options
-        
-        # Get current child table
-        child_table = target_doc.get(table_name, [])
-        
-        # Skip the normal update process and use direct DB updates instead
-        # This avoids the issues with child table handling in the document model
-        
-        # 1. Make sure target_doc is saved first
-        if target_doc.is_new():
-            target_doc.insert(ignore_permissions=True)
-        
-        # 2. Find or create the child row
-        child_row = None
-        if index is not None:
-            # Specific index requested
-            if len(child_table) > index:
-                # Row exists, use it
-                child_row = child_table[index]
-            else:
-                # Need to create new rows up to the index
-                for i in range(len(child_table), index + 1):
-                    new_row = frappe.new_doc(child_doctype)
-                    new_row.parent = target_doc.name
-                    new_row.parenttype = target_doc.doctype
-                    new_row.parentfield = table_name
-                    new_row.insert(ignore_permissions=True)
-                    
-                    if i == index:
-                        child_row = new_row
-        else:
-            # No index, use first row or create one
-            if child_table:
-                child_row = child_table[0]
-            else:
-                # Create first row
-                child_row = frappe.new_doc(child_doctype)
-                child_row.parent = target_doc.name
-                child_row.parenttype = target_doc.doctype
-                child_row.parentfield = table_name
-                child_row.insert(ignore_permissions=True)
-        
-        # 3. Now update just the specific field using frappe.db.set_value
-        if child_row and child_row.name:
-            frappe.db.set_value(child_doctype, child_row.name, field_name, parent_value)
-            frappe.log_error(
-                f"Direct DB update: {child_doctype} {child_row.name}.{field_name} = {parent_value}",
-                "Parent to Child Update"
-            )
-            
-            # 4. Refresh the target document to see the changes
-            target_doc.reload()
-
-    def _map_single_field(self, source_doc, target_doc, source_field, target_field):
-        """Map a single field from source to target, handling hierarchical fields"""
-        # Get source value
-        source_value = None
-        
-        if "." in source_field:
-            # This is a hierarchical field
-            source_value = self._get_hierarchical_field_value(source_doc, source_field)
-        else:
-            # Standard field
-            source_value = source_doc.get(source_field)
-        
-        # Only proceed if we have a non-None source value
-        # This prevents clearing target fields when source is None
-        if source_value is not None:
-            # Set target value
-            if "." in target_field:
-                # This is a hierarchical field
-                self._set_hierarchical_field_value(target_doc, target_field, source_value)
-            else:
-                # Standard field
-                target_doc.set(target_field, source_value)
-
-    def _get_hierarchical_field_value(self, doc, field_path):
-        """Get value from a hierarchical field path, supporting indexes"""
-        # Parse the field path
-        path_info = self._parse_table_reference(field_path)
-        table_name = path_info["table"]
-        field_name = path_info["field"]
-        index = path_info["index"]
-        
-        # Get the child table
-        child_table = doc.get(table_name, [])
-        if not child_table:
-            return None
-        
-        # Get the row based on index
-        if index is not None:
-            # Use specific index
-            if len(child_table) > index:
-                return child_table[index].get(field_name)
-            else:
-                return None
-        else:
-            # Use first row by default
-            return child_table[0].get(field_name) if child_table else None
-
-    def _set_hierarchical_field_value(self, doc, field_path, value):
-        """Set value in a hierarchical field path, supporting indexes"""
-        # Parse the field path
-        path_info = self._parse_table_reference(field_path)
-        table_name = path_info["table"]
-        field_name = path_info["field"]
-        index = path_info["index"]
-        
-        # Make sure the table field exists in the doctype
-        meta = frappe.get_meta(doc.doctype)
-        table_field = meta.get_field(table_name)
-        if not table_field:
-            frappe.log_error(f"Table field {table_name} not found in {doc.doctype}", "Hierarchical Field Error")
-            return
-
-        # Get the child doctype
-        child_doctype = table_field.options
-        
-        # Get existing child table (important to work with the actual table, not a copy)
-        child_table = doc.get(table_name, [])
-        
-        # Determine which row to update or create
-        if index is not None:
-            # Specific index requested
-            while len(child_table) <= index:
-                # Create new rows until we reach the desired index
-                new_row = frappe.new_doc(child_doctype)
-                child_table.append(new_row)
-            
-            # Update the specified row
-            child_table[index].set(field_name, value)
-        else:
-            # No index specified, use first row or create one
-            if not child_table:
-                # Create first row if table is empty
-                new_row = frappe.new_doc(child_doctype)
-                new_row.set(field_name, value)
-                child_table.append(new_row)
-            else:
-                # Update existing first row
-                child_table[0].set(field_name, value)
-        
-        # Important: Don't use set() for the entire table as it can cause issues
-        # Instead, make sure the internal reference is updated correctly
-        doc.set(table_name, child_table)
-        
-        # Log for debugging
-        frappe.log_error(
-            f"Updated {doc.doctype} {doc.name}: Set {field_path} to {value}",
-            "Hierarchical Field Update"
-        )
-
-    def _parse_table_reference(self, field_path):
-        """Parse a field path with potential index, like "details[0].field1" or "details.field1" """
-        import re
-        
-        # Split into table part and field part
-        parts = field_path.split(".")
-        if len(parts) != 2:
-            frappe.log_error(f"Invalid field path: {field_path}", "Parse Error")
-            return {"table": field_path, "field": "", "index": None}
-        
-        table_part = parts[0]
-        field_part = parts[1]
-        
-        # Check for index notation like "details[0]"
-        index_match = re.match(r'(.+)\[(\d+)\]', table_part)
-        if index_match:
-            table_name = index_match.group(1)
-            index = int(index_match.group(2))
-        else:
-            table_name = table_part
-            index = None
-        
-        return {
-            "table": table_name,
-            "field": field_part,
-            "index": index
-        }
-                        
-    def _process_hierarchical_field_mapping(self, source_doc, target_doc, source_field, target_field):
-        """Process field mappings that involve parent-child relationships"""
-        # Parse source field path
-        source_is_child = "." in source_field
-        target_is_child = "." in target_field
-        
-        # Get source value
-        source_value = None
-        if source_is_child:
-            source_value = self._get_child_field_value(source_doc, source_field)
-        else:
-            # Direct parent field
-            source_value = source_doc.get(source_field)
-        
-        # Skip if no source value
-        if source_value is None:
-            return
-            
-        # Set target value
-        if target_is_child:
-            self._set_child_field_value(target_doc, target_field, source_value)
-        else:
-            # Direct parent field
-            target_doc.set(target_field, source_value)
-            
-    def _parse_field_path(self, field_path):
-        """Parse a field path into table, index, and field components"""
-        # Check if field has an index specified
-        index = None
-        if "[" in field_path and "]" in field_path:
-            # Extract index from something like "table_name[2].field_name"
-            table_part, field_part = field_path.split(".")
-            
-            # Extract index from table part
-            import re
-            match = re.match(r'(.+)\[(\d+)\]', table_part)
-            if match:
-                table_name = match.group(1)
-                index = int(match.group(2))
-            else:
-                table_name = table_part
-        else:
-            # No index specified
-            table_name, field_name = field_path.split(".")
-            
-        return {
-            "table_name": table_name,
-            "field_name": field_name,
-            "index": index
-        }
-        
-    def _get_child_field_value(self, doc, field_path):
-        """Get value from a child table field"""
-        # Parse the field path
-        path_info = self._parse_field_path(field_path)
-        
-        # Get child table
-        child_table = doc.get(path_info["table_name"], [])
-        if not child_table:
-            return None
-        
-        # Check if key field is specified for this child table
-        key_field = None
-        for mapping in self.config.get("child_mappings", []):
-            if mapping.get("source_table") == path_info["table_name"]:
-                key_field = mapping.get("key_field")
-                break
-        
-        # Get the appropriate row
-        child_row = None
-        if path_info["index"] is not None:
-            # Use index if specified
-            if len(child_table) > path_info["index"]:
-                child_row = child_table[path_info["index"]]
-            else:
-                # Index doesn't exist
-                return None
-        elif key_field:
-            # Try to find row by key field
-            # This would need additional logic to match by key
-            # For now we'll just use the first row
-            child_row = child_table[0] if child_table else None
-        else:
-            # Default to first row
-            child_row = child_table[0] if child_table else None
-        
-        # Get the field value from the row
-        if child_row:
-            return child_row.get(path_info["field_name"])
-        
-        return None
-        
-    def _set_child_field_value(self, doc, field_path, value):
-        """Set value in a child table field"""
-        # Parse the field path
-        path_info = self._parse_field_path(field_path)
-        
-        # Get or create child table
-        child_table = doc.get(path_info["table_name"], [])
-        
-        # Check if we can set an existing row or need to create one
-        if path_info["index"] is not None:
-            # Specific index was requested
-            while len(child_table) <= path_info["index"]:
-                # Create enough rows to reach the index
-                child_doctype = frappe.get_meta(doc.doctype).get_field(path_info["table_name"]).options
-                child_table.append(frappe.new_doc(child_doctype))
-            
-            # Set the value in the specified row
-            child_table[path_info["index"]].set(path_info["field_name"], value)
-        else:
-            # No index specified, use first row or create one
-            if not child_table:
-                # Create first row if table is empty
-                child_doctype = frappe.get_meta(doc.doctype).get_field(path_info["table_name"]).options
-                child_row = frappe.new_doc(child_doctype)
-                child_row.set(path_info["field_name"], value)
-                child_table.append(child_row)
-            else:
-                # Use first existing row
-                child_table[0].set(path_info["field_name"], value)
-        
-        # Update the table in the document
-        doc.set(path_info["table_name"], child_table)
-        
-@frappe.whitelist()
-def run_test_sync(doctype, docname, source_doctype=None, source_name=None):
-    """Bridge function to call instance method"""
-    sync_doc = frappe.get_doc("Live Sync", docname)
-    
-    if not source_doctype:
-        source_doctype = sync_doc.source_doctype
-        
-    if not source_name:
-        # Get a random document
-        docs = frappe.get_all(source_doctype, limit=1)
-        if not docs:
-            return {"success": False, "message": f"No documents found in {source_doctype}"}
-        source_name = docs[0].name
-        
-    try:
-        # Get source document
-        source_doc = frappe.get_doc(source_doctype, source_name)
-        
-        # Check if document matches any target
-        is_forward = (source_doctype == sync_doc.source_doctype)
-        target_doc = sync_doc.find_matching_document(source_doc, is_forward)
-        
-        # Set up field mappings
-        field_mappings = []
-        config_mappings = sync_doc.config.get("direct_fields", {})
-        
-        if not is_forward:
-            # Reverse mappings for backward direction
-            config_mappings = {v: k for k, v in config_mappings.items()}
-            
-        for source_field, target_field in config_mappings.items():
-            field_mappings.append({
-                "source_field": source_field,
-                "target_field": target_field,
-                "value": source_doc.get(source_field)
-            })
-                
-        # Return test results
-        return {
-            "success": True,
-            "source_doc": source_name,
-            "target_exists": bool(target_doc),
-            "target_doc": target_doc.name if target_doc else None,
-            "field_mappings": field_mappings
-        }
-                
-    except Exception as e:
-        frappe.log_error(f"Test sync error: {str(e)}\n{traceback.format_exc()}", "LiveSync Test Error")
-        return {"success": False, "message": str(e)}
-    
-def process_bulk_sync(sync_config, source_doctype, doc_names, is_forward, job_id=None):
-    """
-    Process bulk sync in background
-    
-    Args:
-        sync_config: Name of LiveSync configuration
-        source_doctype: DocType to sync from
-        doc_names: List of document names to sync
-        is_forward: Direction of sync
-        job_id: Optional job ID for tracking progress
-    """
-    try:
-        # Get sync configuration
-        sync = frappe.get_doc("Live Sync", sync_config)
-        
-        # Initialize counters
-        total = len(doc_names)
-        processed = 0
-        succeeded = 0
-        failed = 0
-        
-        # Create a unique job ID if not provided
-        if not job_id:
-            import uuid
-            job_id = f"bulk_sync_{uuid.uuid4().hex[:10]}"
-        
-        # Log start of process for debugging
-        frappe.log_error(
-            f"Starting bulk sync job {job_id} for {sync_config}, total documents: {total}",
-            "Bulk Sync Start"
-        )
-            
-        # Store initial job info using direct key-value approach
-        frappe.cache().set_value(f"bs:{job_id}:total", total)
-        frappe.cache().set_value(f"bs:{job_id}:processed", 0)
-        frappe.cache().set_value(f"bs:{job_id}:succeeded", 0)
-        frappe.cache().set_value(f"bs:{job_id}:failed", 0)
-        frappe.cache().set_value(f"bs:{job_id}:status", "In Progress")
-        frappe.cache().set_value(f"bs:{job_id}:start_time", frappe.utils.now())
-        frappe.cache().set_value(f"bs:{job_id}:sync_config", sync_config)
-        frappe.cache().set_value(f"bs:{job_id}:source_doctype", source_doctype)
-        frappe.cache().set_value(f"bs:{job_id}:direction", "Forward" if is_forward else "Backward")
-        
-        # Immediately send an initial progress notification
-        frappe.publish_realtime(
-            event='bulk_sync_progress',
-            message={
-                'job_id': job_id,
-                'percent': 0,
-                'processed': 0,
-                'total': total,
-                'succeeded': 0,
-                'failed': 0,
-                'sync_config': sync_config
-            },
-            after_commit=True
-        )
-        
-        # Process in batches of 20 (smaller batches for more frequent updates)
-        batch_size = 20
-        
-        for i in range(0, total, batch_size):
-            batch = doc_names[i:i+batch_size]
-            
-            for doc_name in batch:
-                try:
-                    # Get full document
-                    source_doc = frappe.get_doc(source_doctype, doc_name)
-                    
-                    # Process sync
-                    sync.sync_document(source_doc, "on_update", is_forward)
-                    
-                    succeeded += 1
-                except Exception as e:
-                    failed += 1
-                    frappe.log_error(
-                        f"Error syncing {source_doctype} {doc_name}: {str(e)}",
-                        "Bulk Sync Error"
-                    )
-                
-                processed += 1
-                
-                # Update progress every 5 documents for more frequent updates
-                if processed % 5 == 0 or processed == total:
-                    # Calculate percentage
-                    percent = round((processed / total) * 100, 2)
-                    
-                    # Update cache with current progress
-                    frappe.cache().set_value(f"bs:{job_id}:processed", processed)
-                    frappe.cache().set_value(f"bs:{job_id}:succeeded", succeeded)
-                    frappe.cache().set_value(f"bs:{job_id}:failed", failed)
-                    frappe.cache().set_value(f"bs:{job_id}:percent", percent)
-                    
-                    # Log progress update for debugging
-                    frappe.log_error(
-                        f"Progress update for job {job_id}: {processed}/{total} ({percent}%)",
-                        "Bulk Sync Progress"
-                    )
-                    
-                    # Use socketio for real-time updates - broadcast to all users
-                    frappe.publish_realtime(
-                        event='bulk_sync_progress',
-                        message={
-                            'job_id': job_id,
-                            'percent': percent,
-                            'processed': processed,
-                            'total': total,
-                            'succeeded': succeeded,
-                            'failed': failed,
-                            'sync_config': sync_config
-                        },
-                        after_commit=True
-                    )
-            
-            # Commit after each batch to ensure events are sent
-            frappe.db.commit()
-        
-        # Update final job status
-        frappe.cache().set_value(f"bs:{job_id}:processed", processed)
-        frappe.cache().set_value(f"bs:{job_id}:succeeded", succeeded)
-        frappe.cache().set_value(f"bs:{job_id}:failed", failed)
-        frappe.cache().set_value(f"bs:{job_id}:percent", 100)
-        frappe.cache().set_value(f"bs:{job_id}:status", "Completed")
-        frappe.cache().set_value(f"bs:{job_id}:end_time", frappe.utils.now())
-        
-        # Log completion for debugging
-        frappe.log_error(
-            f"Completed bulk sync job {job_id}: {processed}/{total}, succeeded: {succeeded}, failed: {failed}",
-            "Bulk Sync Complete"
-        )
-        
-        # Send final completion notification
-        frappe.publish_realtime(
-            event='bulk_sync_completed',
-            message={
-                'job_id': job_id,
-                'processed': processed,
-                'succeeded': succeeded, 
-                'failed': failed,
-                'sync_config': sync_config
-            },
-            after_commit=True
-        )
-        
-    except Exception as e:
-        # Update job status on error
-        if job_id:
-            frappe.cache().set_value(f"bs:{job_id}:status", "Error")
-            frappe.cache().set_value(f"bs:{job_id}:error", str(e))
-            frappe.cache().set_value(f"bs:{job_id}:end_time", frappe.utils.now())
-            
-            # Notify about the error
-            frappe.publish_realtime(
-                event='bulk_sync_error',
-                message={
-                    'job_id': job_id,
-                    'error': str(e),
-                    'sync_config': sync_config
-                },
-                after_commit=True
-            )
-        
-        frappe.log_error(f"Bulk sync process error: {str(e)}\n{traceback.format_exc()}", "Bulk Sync Error")
-
-@frappe.whitelist()
-def get_bulk_sync_jobs(sync_config=None):
-    """Get the list of bulk sync jobs for a configuration"""
-    try:
-        # Instead of trying to get keys from Redis, we'll use a different approach:
-        # We'll store all active job IDs in a special key
-        
-        # Create a simple list of active sync jobs with their metadata in Sync Logs
-        jobs = []
-        
-        # Get recent Sync Logs
-        log_filters = {}
-        if sync_config:
-            log_filters["sync_configuration"] = sync_config
-            
-        recent_logs = frappe.get_all(
-            "Sync Log",
-            filters=log_filters,
-            fields=["sync_configuration", "timestamp", "source_doctype", "target_doctype", 
-                   "source_doc", "target_doc", "status", "direction", "event"],
-            order_by="timestamp desc",
-            limit=50  # Get last 50 logs
-        )
-        
-        # Group logs by source document to simulate job tracking
-        job_groups = {}
-        
-        for log in recent_logs:
-            # Create a unique key for each potential "job" based on synchronization batch
-            key = f"{log.sync_configuration}:{log.source_doctype}:{log.timestamp.strftime('%Y-%m-%d')}"
-            
-            if key not in job_groups:
-                job_groups[key] = {
-                    "job_id": key,
-                    "sync_config": log.sync_configuration,
-                    "source_doctype": log.source_doctype,
-                    "target_doctype": log.target_doctype,
-                    "direction": log.direction,
-                    "start_time": log.timestamp,
-                    "status": "Completed",
-                    "logs": [],
-                    "processed": 0,
-                    "succeeded": 0,
-                    "failed": 0
-                }
-                
-            # Add this log to the job
-            job_groups[key]["logs"].append(log)
-            
-            # Update counts
-            job_groups[key]["processed"] += 1
-            if log.status == "Success":
-                job_groups[key]["succeeded"] += 1
-            elif log.status == "Error":
-                job_groups[key]["failed"] += 1
-                
-            # Update the timestamp if this is earlier than the current start_time
-            if log.timestamp < job_groups[key]["start_time"]:
-                job_groups[key]["end_time"] = job_groups[key]["start_time"]
-                job_groups[key]["start_time"] = log.timestamp
-        
-        # Convert job groups to a list and add derived fields
-        for key, job in job_groups.items():
-            # Calculate percent
-            if job["processed"] > 0:
-                job["percent"] = (job["succeeded"] / job["processed"]) * 100
-            else:
-                job["percent"] = 0
-                
-            # Calculate total based on processed
-            job["total"] = job["processed"]
-            
-            # Set a reasonable limit on logs to avoid huge data transfers
-            job["logs"] = job["logs"][:10]
-            
-            jobs.append(job)
-            
-        # Sort by start time (newest first)
-        jobs.sort(key=lambda x: x.get("start_time", ""), reverse=True)
-        
-        # Limit to most recent 20 jobs to avoid overwhelming the UI
-        jobs = jobs[:20]
-            
-        return {
-            "success": True,
-            "jobs": jobs
-        }
-    except Exception as e:
-        frappe.log_error(f"Error getting jobs list: {str(e)}\n{frappe.get_traceback()}", "Bulk Sync Jobs Error")
-        return {
-            "success": False,
-            "message": str(e)
-        }
-
-@frappe.whitelist()
-def get_bulk_sync_job_status(job_id):
-    """Get the status of a bulk sync job"""
-    try:
-        # Collect all fields for this job
-        job_data = {}
-        job_data["job_id"] = job_id
-        
-        # Build the prefix for all keys
-        prefix = f"bulk_sync_job:{job_id}"
-        
-        # Check if job exists by looking for a critical field
-        status = frappe.cache().get_value(f"{prefix}:status")
-        if status is None:
-            return {
-                "success": False,
-                "message": "Job not found or expired"
-            }
-        
-        # Get all the fields
-        for field in ["total", "processed", "succeeded", "failed", "percent", 
-                      "status", "start_time", "end_time", "error", 
-                      "sync_config", "source_doctype", "direction"]:
-            value = frappe.cache().get_value(f"{prefix}:{field}")
-            if value is not None:
-                job_data[field] = value
-        
-        # Convert relevant fields to proper types
-        for field in ["total", "processed", "succeeded", "failed"]:
-            if field in job_data and job_data[field] is not None:
-                try:
-                    job_data[field] = int(job_data[field])
-                except (ValueError, TypeError):
-                    pass
-        
-        if "percent" in job_data and job_data["percent"] is not None:
-            try:
-                job_data["percent"] = float(job_data["percent"])
-            except (ValueError, TypeError):
-                pass
-                
-        return {
-            "success": True,
-            "data": job_data
-        }
-    except Exception as e:
-        frappe.log_error(f"Error getting job status: {str(e)}", "Bulk Sync Job Status Error")
-        return {
-            "success": False,
-            "message": str(e)
-        }

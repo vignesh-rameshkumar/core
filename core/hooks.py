@@ -48,7 +48,6 @@ doc_events = {
     },
 
     "*": {
-        "after_insert": "core.sync_handler.process_doc_event",
         "on_update": "core.sync_handler.process_doc_event", 
         "on_trash": "core.sync_handler.process_doc_event"
     }
