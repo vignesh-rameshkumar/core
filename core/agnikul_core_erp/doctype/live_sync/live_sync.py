@@ -822,7 +822,8 @@ class LiveSync(Document):
                     sync_name_used = True
                     
                     # Check if the document was already inserted by the hook
-                    if hasattr(target_doc, "__islocal") and not target_doc.__islocal:
+                    # FIXED: Use safer hasattr check instead of direct attribute access
+                    if not getattr(target_doc, "__islocal", True):
                         # Document is already in the database
                         pass
             except Exception as e:
@@ -845,20 +846,22 @@ class LiveSync(Document):
             self._process_child_tables(doc, target_doc, is_forward)
 
             # 12) Save the target document
-            # Check if document needs to be inserted or updated
-            is_new = target_doc.get("__islocal", True)
+            # FIXED: Use safer getattr instead of direct dictionary access for __islocal
+            is_new = getattr(target_doc, "__islocal", True)
             
             # For documents returned by sync_name hook that might already be inserted
             if is_new:
                 # Double-check we're not trying to insert a document that already exists
                 if frappe.db.exists(target_doctype, target_doc.name):
                     # Load the existing document and update it instead
-                    target_doc = frappe.get_doc(target_doctype, target_doc.name)
-                    self._process_field_mappings(doc, target_doc, is_forward)
-                    self._process_child_tables(doc, target_doc, is_forward)
-                    target_doc._syncing = True
-                    target_doc.save(ignore_permissions=True)
+                    existing_doc = frappe.get_doc(target_doctype, target_doc.name)
+                    self._process_field_mappings(doc, existing_doc, is_forward)
+                    self._process_child_tables(doc, existing_doc, is_forward)
+                    existing_doc._syncing = True
+                    existing_doc.save(ignore_permissions=True)
                     action = "Update"
+                    # Use the existing doc as our target for after_sync hook
+                    target_doc = existing_doc
                 else:
                     # Insert new document
                     target_doc.insert(ignore_permissions=True)

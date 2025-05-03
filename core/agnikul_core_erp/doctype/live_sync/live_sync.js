@@ -751,7 +751,8 @@ function show_bulk_sync_results(results) {
     }, 100);
 }
 
-// Configure sync dialog
+// Open sync configuration dialog
+
 function open_sync_config_dialog(frm) {
     var src = frm.doc.source_doctype;
     var tgt = frm.doc.target_doctype;
@@ -765,56 +766,515 @@ function open_sync_config_dialog(frm) {
             var src_meta = frappe.get_meta(src);
             var tgt_meta = frappe.get_meta(tgt);
 
-            // Field lists
-            var field_options = function(fmeta) { 
-                return fmeta.fields.map(function(f) { 
-                    return f.fieldname + ' [' + f.fieldtype + ']'; 
+            // Create field lists with better display
+            function create_field_options(meta) {
+                var fields = [];
+                meta.fields.forEach(function(f) {
+                    // Skip common system fields
+                    if (['owner', 'creation', 'modified', 'modified_by', 'docstatus', 'idx'].includes(f.fieldname)) {
+                        return;
+                    }
+                    
+                    fields.push({
+                        value: f.fieldname,
+                        label: f.label + ' (' + f.fieldname + ') [' + f.fieldtype + ']'
+                    });
                 });
-            };
-            var source_fields = field_options(src_meta);
-            var target_fields = field_options(tgt_meta);
+                
+                // Sort alphabetically by label
+                fields.sort(function(a, b) {
+                    return a.label.localeCompare(b.label);
+                });
+                
+                // Add 'name' field
+                fields.unshift({
+                    value: 'name',
+                    label: 'Name (name) [Data]'
+                });
+                
+                return fields;
+            }
+            
+            // Get field metadata maps for reference
+            function create_field_metadata_map(meta) {
+                var map = {
+                    'name': { fieldtype: 'Data', label: 'Name' }
+                };
+                
+                meta.fields.forEach(function(f) {
+                    map[f.fieldname] = {
+                        fieldtype: f.fieldtype,
+                        label: f.label || f.fieldname
+                    };
+                });
+                
+                return map;
+            }
+            
+            var source_fields = create_field_options(src_meta);
+            var target_fields = create_field_options(tgt_meta);
+            var src_field_meta = create_field_metadata_map(src_meta);
+            var tgt_field_meta = create_field_metadata_map(tgt_meta);
+            
+            // Get child tables
+            function get_child_tables(meta) {
+                var tables = [];
+                meta.fields.forEach(function(f) {
+                    if (f.fieldtype === 'Table') {
+                        tables.push({
+                            value: f.fieldname,
+                            label: (f.label || f.fieldname) + ' (' + f.fieldname + ')'
+                        });
+                    }
+                });
+                return tables;
+            }
+            
+            var source_tables = get_child_tables(src_meta);
+            var target_tables = get_child_tables(tgt_meta);
 
             var d = new frappe.ui.Dialog({
                 title: __('Configure Sync Configuration'),
                 size: 'large',
                 fields: [
                     { fieldtype: 'HTML', fieldname: 'beta_info', options: '<p><em>Use this form to manage all sync settings.</em></p>' },
-                    { fieldtype: 'Table', fieldname: 'direct_fields', label: __('Direct Field Mappings'), in_place: true,
-                      cannot_add_rows: false, data: [{'source_field':'', 'target_field':''}],
+                    
+                    // IDENTIFIER MAPPING SECTION
+                    { fieldtype: 'Section Break', label: __('Identifier Mapping') },
+                    { fieldtype: 'HTML', fieldname: 'identifier_help', options: '<p><small>Identifier fields are used to find matching documents between systems. These fields should contain unique values (e.g., email, ID number).</small></p>' },
+                    { fieldtype: 'Table', fieldname: 'identifier_mapping', label: __('Identifier Field Mappings'), in_place: true,
+                      cannot_add_rows: false, data: [{'source_field':'', 'source_fieldtype':'', 'target_field':'', 'target_fieldtype':''}],
                       fields: [
-                          { fieldtype: 'Select', fieldname: 'source_field', label: __('Source Field'), options: source_fields, reqd:1, "in_list_view": 1 },
-                          { fieldtype: 'Select', fieldname: 'target_field', label: __('Target Field'), options: target_fields, reqd:1, "in_list_view": 1 }
+                          { fieldtype: 'Select', fieldname: 'source_field', label: __('Source Field'), options: source_fields, reqd:1, "in_list_view": 1, 
+                            change: function(e) {
+                                var grid_row = cur_frm.get_field("identifier_mapping").grid.get_row(this.doc.idx - 1);
+                                var field = this.doc.source_field;
+                                if (field && src_field_meta[field]) {
+                                    grid_row.doc.source_fieldtype = src_field_meta[field].fieldtype;
+                                    grid_row.refresh();
+                                }
+                            }
+                          },
+                          { fieldtype: 'Data', fieldname: 'source_fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 },
+                          { fieldtype: 'Select', fieldname: 'target_field', label: __('Target Field'), options: target_fields, reqd:1, "in_list_view": 1,
+                            change: function(e) {
+                                var grid_row = cur_frm.get_field("identifier_mapping").grid.get_row(this.doc.idx - 1);
+                                var field = this.doc.target_field;
+                                if (field && tgt_field_meta[field]) {
+                                    grid_row.doc.target_fieldtype = tgt_field_meta[field].fieldtype;
+                                    grid_row.refresh();
+                                }
+                            }
+                          },
+                          { fieldtype: 'Data', fieldname: 'target_fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 }
                       ]
                     },
+                    
+                    // DIRECT FIELD MAPPINGS SECTION
+                    { fieldtype: 'Section Break', label: __('Direct Field Mappings') },
+                    { fieldtype: 'Table', fieldname: 'direct_fields', label: __('Direct Field Mappings'), in_place: true,
+                      cannot_add_rows: false, data: [{'source_field':'', 'source_fieldtype':'', 'target_field':'', 'target_fieldtype':''}],
+                      fields: [
+                          { fieldtype: 'Select', fieldname: 'source_field', label: __('Source Field'), options: source_fields, reqd:1, "in_list_view": 1,
+                            change: function(e) {
+                                var grid_row = cur_frm.get_field("direct_fields").grid.get_row(this.doc.idx - 1);
+                                var field = this.doc.source_field;
+                                if (field && src_field_meta[field]) {
+                                    grid_row.doc.source_fieldtype = src_field_meta[field].fieldtype;
+                                    grid_row.refresh();
+                                }
+                            }
+                          },
+                          { fieldtype: 'Data', fieldname: 'source_fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 },
+                          { fieldtype: 'Select', fieldname: 'target_field', label: __('Target Field'), options: target_fields, reqd:1, "in_list_view": 1,
+                            change: function(e) {
+                                var grid_row = cur_frm.get_field("direct_fields").grid.get_row(this.doc.idx - 1);
+                                var field = this.doc.target_field;
+                                if (field && tgt_field_meta[field]) {
+                                    grid_row.doc.target_fieldtype = tgt_field_meta[field].fieldtype;
+                                    grid_row.refresh();
+                                }
+                            }
+                          },
+                          { fieldtype: 'Data', fieldname: 'target_fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 }
+                      ]
+                    },
+                    
+                    // CHILD MAPPINGS SECTION
+                    { fieldtype: 'Section Break', label: __('Child Table Mappings') },
                     { fieldtype: 'Table', fieldname: 'child_mappings', label: __('Child Table Mappings'), in_place: true,
                       cannot_add_rows: false, data: [{'source_table':'', 'target_table':'', 'fields_map':''}],
                       fields: [
-                          { fieldtype: 'Data',   fieldname: 'source_table', label: __('Source Table'), reqd:1, "in_list_view": 1 },
-                          { fieldtype: 'Data',   fieldname: 'target_table', label: __('Target Table'), reqd:1, "in_list_view": 1 },
-                          { fieldtype: 'Small Text', fieldname:'fields_map', label: __('Field Map (JSON)'), reqd:1, "in_list_view": 1 }
+                          { fieldtype: 'Select', fieldname: 'source_table', label: __('Source Table'), options: source_tables, reqd:1, "in_list_view": 1 },
+                          { fieldtype: 'Select', fieldname: 'target_table', label: __('Target Table'), options: target_tables, reqd:1, "in_list_view": 1 },
+                          { fieldtype: 'Small Text', fieldname:'fields_map', label: __('Field Map (JSON)'), reqd:1, "in_list_view": 1 },
+                          { fieldtype: 'Button', fieldname: 'config_child_mapping', label: __('Configure Fields'),
+                            click: function() {
+                                var grid_row = cur_frm.get_field("child_mappings").grid.get_row(this.doc.idx - 1);
+                                var source_table = grid_row.doc.source_table;
+                                var target_table = grid_row.doc.target_table;
+                                
+                                if (!source_table || !target_table) {
+                                    frappe.msgprint(__("Please select both source and target tables first"));
+                                    return;
+                                }
+                                
+                                // Get the child doctypes
+                                var source_child_doctype = "";
+                                var target_child_doctype = "";
+                                
+                                src_meta.fields.forEach(function(f) {
+                                    if (f.fieldname === source_table && f.fieldtype === 'Table') {
+                                        source_child_doctype = f.options;
+                                    }
+                                });
+                                
+                                tgt_meta.fields.forEach(function(f) {
+                                    if (f.fieldname === target_table && f.fieldtype === 'Table') {
+                                        target_child_doctype = f.options;
+                                    }
+                                });
+                                
+                                if (!source_child_doctype || !target_child_doctype) {
+                                    frappe.msgprint(__("Could not determine child doctypes"));
+                                    return;
+                                }
+                                
+                                // Load the child doctypes and open a config dialog
+                                frappe.model.with_doctype(source_child_doctype, function() {
+                                    frappe.model.with_doctype(target_child_doctype, function() {
+                                        open_child_mapping_dialog(
+                                            source_child_doctype, 
+                                            target_child_doctype,
+                                            grid_row.doc
+                                        );
+                                    });
+                                });
+                            }
+                          }
                       ]
                     },
+                    
+                    // DEFAULT VALUES SECTION
+                    { fieldtype: 'Section Break', label: __('Default Values') },
+                    { fieldtype: 'HTML', fieldname: 'default_help', options: '<p><small>Default values are applied to target fields when creating new documents.</small></p>' },
                     { fieldtype: 'Table', fieldname: 'default_values', label: __('Default Values'), in_place: true,
-                      cannot_add_rows: false, data: [{'fieldname':'', 'default_value':''}],
+                      cannot_add_rows: false, data: [{'fieldname':'', 'fieldtype':'', 'default_value':''}],
                       fields: [
-                          { fieldtype: 'Select', fieldname: 'fieldname', label: __('Field'), options: target_fields, reqd:1, "in_list_view": 1 },
-                          { fieldtype: 'Data',   fieldname: 'default_value', label: __('Default Value'), reqd:1, "in_list_view": 1 }
+                          { fieldtype: 'Select', fieldname: 'fieldname', label: __('Field'), options: target_fields, reqd:1, "in_list_view": 1,
+                            change: function(e) {
+                                var grid_row = cur_frm.get_field("default_values").grid.get_row(this.doc.idx - 1);
+                                var field = this.doc.fieldname;
+                                if (field && tgt_field_meta[field]) {
+                                    grid_row.doc.fieldtype = tgt_field_meta[field].fieldtype;
+                                    grid_row.refresh();
+                                }
+                            }
+                          },
+                          { fieldtype: 'Data', fieldname: 'fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 },
+                          { fieldtype: 'Data', fieldname: 'default_value', label: __('Default Value'), reqd:1, "in_list_view": 1 }
                       ]
                     },
+                    
+                    // TRANSFORMS SECTION
+                    { fieldtype: 'Section Break', label: __('Transforms') },
+                    { fieldtype: 'HTML', fieldname: 'transform_help', options: '<p><small>Transforms allow you to modify field values during sync using custom Python functions.</small></p>' },
                     { fieldtype: 'Table', fieldname: 'transforms', label: __('Transforms'), in_place: true,
-                      cannot_add_rows: false, data: [{'fieldname':'', 'function_path':''}],
+                      cannot_add_rows: false, data: [{'fieldname':'', 'fieldtype':'', 'function_path':''}],
                       fields: [
-                          { fieldtype: 'Select', fieldname: 'fieldname', label: __('Source Field'), options: source_fields, reqd:1, "in_list_view": 1 },
-                          { fieldtype: 'Data',   fieldname: 'function_path', label: __('Transform Function Path'), reqd:1, "in_list_view": 1 }
+                          { fieldtype: 'Select', fieldname: 'fieldname', label: __('Source Field'), options: source_fields, reqd:1, "in_list_view": 1,
+                            change: function(e) {
+                                var grid_row = cur_frm.get_field("transforms").grid.get_row(this.doc.idx - 1);
+                                var field = this.doc.fieldname;
+                                if (field && src_field_meta[field]) {
+                                    grid_row.doc.fieldtype = src_field_meta[field].fieldtype;
+                                    grid_row.refresh();
+                                }
+                            }
+                          },
+                          { fieldtype: 'Data', fieldname: 'fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 },
+                          { fieldtype: 'Data', fieldname: 'function_path', label: __('Transform Function Path'), reqd:1, "in_list_view": 1,
+                            description: __('Python function path (e.g., module.submodule.transform_function)')
+                          }
                       ]
                     },
-                    { fieldtype: 'Section Break' },
+                    
+                    // HOOKS SECTION
+                    { fieldtype: 'Section Break', label: __('Hooks') },
+                    { fieldtype: 'HTML', fieldname: 'hooks_help', options: '<p><small>Hooks allow for custom logic during the sync process. These should be paths to Python functions (e.g., module.submodule.function_name).</small></p>' },
                     { fieldtype: 'Data', fieldname: 'hooks_before', label: __('Before Sync Hook (Function Path)') },
+                    { fieldtype: 'Data', fieldname: 'hooks_sync_name', label: __('Sync Name Hook (Function Path)'),
+                      description: __('Optional. Controls document naming. Use "core.hook_helpers.set_name" to share names or "core.hook_helpers.sync_name" to create with same name.') },
                     { fieldtype: 'Data', fieldname: 'hooks_after',  label: __('After Sync Hook (Function Path)') },
-                    { fieldtype: 'Check', fieldname: 'allow_recreate', label: __('Allow Recreate Deleted Targets') },
-                    { fieldtype: 'Button', fieldname: 'save', label: __('Save Configuration'), btnType:'btn-primary' }
-                ]
+                    
+                    // OTHER OPTIONS
+                    { fieldtype: 'Section Break', label: __('Other Options') },
+                    { fieldtype: 'Check', fieldname: 'allow_recreate', label: __('Allow Recreate Deleted Targets') }
+                ],
+                // Add primary action instead of a save button field
+                primary_action_label: __('Save Configuration'),
+                primary_action: function() {
+                    var vals = d.get_values();
+                    
+                    var newcfg = { 
+                        direct_fields: {}, 
+                        child_mappings: [], 
+                        default_values: {}, 
+                        transform: {}, 
+                        hooks: {}, 
+                        identifier_mapping: {},
+                        allow_recreate: true 
+                    };
+                    
+                    // Process direct fields
+                    if (vals.direct_fields) {
+                        for (var i = 0; i < vals.direct_fields.length; i++) {
+                            var row = vals.direct_fields[i];
+                            if (row.source_field && row.target_field) {
+                                newcfg.direct_fields[row.source_field] = row.target_field;
+                            }
+                        }
+                    }
+                    
+                    // Process child mappings
+                    if (vals.child_mappings) {
+                        for (var i = 0; i < vals.child_mappings.length; i++) {
+                            var row = vals.child_mappings[i];
+                            if (row.source_table && row.target_table && row.fields_map) {
+                                try {
+                                    var fields = JSON.parse(row.fields_map);
+                                    newcfg.child_mappings.push({
+                                        source_table: row.source_table,
+                                        target_table: row.target_table,
+                                        fields: fields.fields || fields, // handle both formats
+                                        key_field: fields.key_field // include key_field if present
+                                    });
+                                } catch(e) {
+                                    frappe.msgprint({
+                                        message: __('Invalid JSON in child fields'),
+                                        indicator: 'red'
+                                    });
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Process default values
+                    if (vals.default_values) {
+                        for (var i = 0; i < vals.default_values.length; i++) {
+                            var row = vals.default_values[i];
+                            if (row.fieldname && row.default_value) {
+                                newcfg.default_values[row.fieldname] = row.default_value;
+                            }
+                        }
+                    }
+                    
+                    // Process transforms
+                    if (vals.transforms) {
+                        for (var i = 0; i < vals.transforms.length; i++) {
+                            var row = vals.transforms[i];
+                            if (row.fieldname && row.function_path) {
+                                newcfg.transform[row.fieldname] = row.function_path;
+                            }
+                        }
+                    }
+                    
+                    // Process identifier mappings
+                    if (vals.identifier_mapping) {
+                        for (var i = 0; i < vals.identifier_mapping.length; i++) {
+                            var row = vals.identifier_mapping[i];
+                            if (row.source_field && row.target_field) {
+                                newcfg.identifier_mapping[row.source_field] = row.target_field;
+                            }
+                        }
+                    }
+                    
+                    // Set hooks
+                    if (vals.hooks_before) newcfg.hooks.before_sync = vals.hooks_before;
+                    if (vals.hooks_sync_name) newcfg.hooks.sync_name = vals.hooks_sync_name;
+                    if (vals.hooks_after) newcfg.hooks.after_sync = vals.hooks_after;
+                    
+                    // Set allow_recreate
+                    newcfg.allow_recreate = !!vals.allow_recreate;
+                    
+                    // Update form
+                    frm.set_value('config', JSON.stringify(newcfg, null, 4));
+                    d.hide();
+                    
+                    frappe.msgprint({
+                        title: __('Configuration Updated'),
+                        indicator: 'green',
+                        message: __('Sync configuration has been updated.')
+                    });
+                }
             });
+
+            // Function to open child mapping configuration dialog
+            function open_child_mapping_dialog(source_child_doctype, target_child_doctype, row_doc) {
+                var src_child_meta = frappe.get_meta(source_child_doctype);
+                var tgt_child_meta = frappe.get_meta(target_child_doctype);
+                
+                // Create field options for source and target
+                function create_child_field_options(meta) {
+                    var fields = [];
+                    meta.fields.forEach(function(f) {
+                        if (!['owner', 'creation', 'modified', 'modified_by', 'docstatus', 'idx', 'parent', 'parenttype', 'parentfield'].includes(f.fieldname)) {
+                            fields.push({
+                                value: f.fieldname,
+                                label: (f.label || f.fieldname) + ' (' + f.fieldname + ') [' + f.fieldtype + ']'
+                            });
+                        }
+                    });
+                    
+                    // Sort alphabetically
+                    fields.sort(function(a, b) {
+                        return a.label.localeCompare(b.label);
+                    });
+                    
+                    return fields;
+                }
+                
+                var source_child_fields = create_child_field_options(src_child_meta);
+                var target_child_fields = create_child_field_options(tgt_child_meta);
+                
+                // Create metadata maps
+                function create_child_field_meta_map(meta) {
+                    var map = {};
+                    meta.fields.forEach(function(f) {
+                        map[f.fieldname] = {
+                            fieldtype: f.fieldtype,
+                            label: f.label || f.fieldname
+                        };
+                    });
+                    return map;
+                }
+                
+                var src_child_field_meta = create_child_field_meta_map(src_child_meta);
+                var tgt_child_field_meta = create_child_field_meta_map(tgt_child_meta);
+                
+                // Parse existing field mappings if any
+                var existing_field_mappings = [];
+                var key_field = '';
+                
+                if (row_doc.fields_map) {
+                    try {
+                        var mapping_obj = JSON.parse(row_doc.fields_map);
+                        
+                        // Handle both formats - old format is directly fields, new format has fields property
+                        var fields_obj = mapping_obj.fields || mapping_obj;
+                        
+                        // Get key_field if present
+                        key_field = mapping_obj.key_field || '';
+                        
+                        for (var src_field in fields_obj) {
+                            if (fields_obj.hasOwnProperty(src_field)) {
+                                var tgt_field = fields_obj[src_field];
+                                existing_field_mappings.push({
+                                    source_field: src_field,
+                                    source_fieldtype: src_child_field_meta[src_field] ? src_child_field_meta[src_field].fieldtype : '',
+                                    target_field: tgt_field,
+                                    target_fieldtype: tgt_child_field_meta[tgt_field] ? tgt_child_field_meta[tgt_field].fieldtype : ''
+                                });
+                            }
+                        }
+                    } catch(e) {
+                        // Invalid JSON, ignore
+                        console.error("Error parsing fields_map: ", e);
+                    }
+                }
+                
+                // If no existing mappings, add an empty row
+                if (existing_field_mappings.length === 0) {
+                    existing_field_mappings.push({
+                        source_field: '',
+                        source_fieldtype: '',
+                        target_field: '',
+                        target_fieldtype: ''
+                    });
+                }
+                
+                // Create child mapping dialog
+                var child_dialog = new frappe.ui.Dialog({
+                    title: __('Configure Child Table Mapping'),
+                    fields: [
+                        { fieldtype: 'HTML', fieldname: 'info', options: `<p>
+                            <strong>Source Table:</strong> ${row_doc.source_table} (${source_child_doctype})<br>
+                            <strong>Target Table:</strong> ${row_doc.target_table} (${target_child_doctype})
+                            </p>`
+                        },
+                        { fieldtype: 'Table', fieldname: 'field_mappings', label: __('Field Mappings'), in_place: true,
+                          cannot_add_rows: false, data: existing_field_mappings,
+                          fields: [
+                              { fieldtype: 'Select', fieldname: 'source_field', label: __('Source Field'), options: source_child_fields, reqd:1, "in_list_view": 1,
+                                change: function(e) {
+                                    // Using child_dialog instead of cur_frm to avoid conflicts
+                                    var grid_row = child_dialog.fields_dict.field_mappings.grid.get_row(this.doc.idx - 1);
+                                    var field = this.doc.source_field;
+                                    if (field && src_child_field_meta[field]) {
+                                        grid_row.doc.source_fieldtype = src_child_field_meta[field].fieldtype;
+                                        grid_row.refresh();
+                                    }
+                                }
+                              },
+                              { fieldtype: 'Data', fieldname: 'source_fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 },
+                              { fieldtype: 'Select', fieldname: 'target_field', label: __('Target Field'), options: target_child_fields, reqd:1, "in_list_view": 1,
+                                change: function(e) {
+                                    // Using child_dialog instead of cur_frm
+                                    var grid_row = child_dialog.fields_dict.field_mappings.grid.get_row(this.doc.idx - 1);
+                                    var field = this.doc.target_field;
+                                    if (field && tgt_child_field_meta[field]) {
+                                        grid_row.doc.target_fieldtype = tgt_child_field_meta[field].fieldtype;
+                                        grid_row.refresh();
+                                    }
+                                }
+                              },
+                              { fieldtype: 'Data', fieldname: 'target_fieldtype', label: __('Type'), read_only: 1, "in_list_view": 1 }
+                          ]
+                        },
+                        { fieldtype: 'Section Break' },
+                        { fieldtype: 'Select', fieldname: 'key_field', label: __('Key Field for Matching'),
+                          options: source_child_fields.map(f => f.value),
+                          description: __('Optional: Field used to match rows between source and target tables.'),
+                          default: key_field
+                        }
+                    ],
+                    primary_action_label: __('Update Mapping'),
+                    primary_action: function() {
+                        var values = child_dialog.get_values();
+                        
+                        // Build field mapping object
+                        var field_map = {};
+                        if (values.field_mappings) {
+                            for (var i = 0; i < values.field_mappings.length; i++) {
+                                var mapping = values.field_mappings[i];
+                                if (mapping.source_field && mapping.target_field) {
+                                    field_map[mapping.source_field] = mapping.target_field;
+                                }
+                            }
+                        }
+                        
+                        // Create the final mapping object
+                        var mapping_obj = {
+                            fields: field_map
+                        };
+                        
+                        if (values.key_field) {
+                            mapping_obj.key_field = values.key_field;
+                        }
+                        
+                        // Update the parent row
+                        row_doc.fields_map = JSON.stringify(mapping_obj, null, 2);
+                        
+                        // Refresh the parent grid
+                        d.fields_dict.child_mappings.grid.refresh();
+                        
+                        child_dialog.hide();
+                    }
+                });
+                
+                child_dialog.show();
+            }
 
             // Parse existing config
             var cfg = {};
@@ -825,25 +1285,26 @@ function open_sync_config_dialog(frm) {
                 cfg = {};
             }
             
-            // ===== DEBUG: Log the parsed configuration =====
-            console.log("Parsed config:", cfg);
-            
             // Initialize config parts if they don't exist
             cfg.direct_fields = cfg.direct_fields || {};
             cfg.child_mappings = cfg.child_mappings || [];
             cfg.default_values = cfg.default_values || {};
             cfg.transform = cfg.transform || {};
             cfg.hooks = cfg.hooks || {};
-
+            cfg.identifier_mapping = cfg.identifier_mapping || {};
+            
             // ===== Build data arrays for each field type =====
             
             // 1. Direct field mappings
             var direct_fields_data = [];
             for (var src_field in cfg.direct_fields) {
                 if (cfg.direct_fields.hasOwnProperty(src_field)) {
+                    var tgt_field = cfg.direct_fields[src_field];
                     direct_fields_data.push({
                         source_field: src_field,
-                        target_field: cfg.direct_fields[src_field]
+                        source_fieldtype: src_field_meta[src_field] ? src_field_meta[src_field].fieldtype : '',
+                        target_field: tgt_field,
+                        target_fieldtype: tgt_field_meta[tgt_field] ? tgt_field_meta[tgt_field].fieldtype : ''
                     });
                 }
             }
@@ -852,11 +1313,22 @@ function open_sync_config_dialog(frm) {
             var child_mappings_data = [];
             for (var i = 0; i < cfg.child_mappings.length; i++) {
                 var m = cfg.child_mappings[i];
-                if (m && m.source_table && m.target_table && m.fields) {
+                if (m && m.source_table && m.target_table) {
+                    var fields_obj = m.fields || {};
+                    
+                    // Create a new mapping object that includes key_field if present
+                    var mapping_obj = {
+                        fields: fields_obj
+                    };
+                    
+                    if (m.key_field) {
+                        mapping_obj.key_field = m.key_field;
+                    }
+                    
                     child_mappings_data.push({
                         source_table: m.source_table,
                         target_table: m.target_table,
-                        fields_map: JSON.stringify(m.fields)
+                        fields_map: JSON.stringify(mapping_obj, null, 2)
                     });
                 }
             }
@@ -867,6 +1339,7 @@ function open_sync_config_dialog(frm) {
                 if (cfg.default_values.hasOwnProperty(field)) {
                     default_values_data.push({
                         fieldname: field,
+                        fieldtype: tgt_field_meta[field] ? tgt_field_meta[field].fieldtype : '',
                         default_value: cfg.default_values[field]
                     });
                 }
@@ -878,19 +1351,27 @@ function open_sync_config_dialog(frm) {
                 if (cfg.transform.hasOwnProperty(field)) {
                     transforms_data.push({
                         fieldname: field,
+                        fieldtype: src_field_meta[field] ? src_field_meta[field].fieldtype : '',
                         function_path: cfg.transform[field]
                     });
                 }
             }
             
-            // ===== DEBUG: Log the data being set =====
-            console.log("Direct fields data:", direct_fields_data);
-            console.log("Child mappings data:", child_mappings_data);
-            console.log("Default values data:", default_values_data);
-            console.log("Transforms data:", transforms_data);
-            console.log("Hooks:", cfg.hooks);
+            // 5. Identifier mappings
+            var identifier_mapping_data = [];
+            for (var src_field in cfg.identifier_mapping) {
+                if (cfg.identifier_mapping.hasOwnProperty(src_field)) {
+                    var tgt_field = cfg.identifier_mapping[src_field];
+                    identifier_mapping_data.push({
+                        source_field: src_field,
+                        source_fieldtype: src_field_meta[src_field] ? src_field_meta[src_field].fieldtype : '',
+                        target_field: tgt_field,
+                        target_fieldtype: tgt_field_meta[tgt_field] ? tgt_field_meta[tgt_field].fieldtype : ''
+                    });
+                }
+            }
             
-            // ===== Set dialog values one by one =====
+            // Set dialog values after a slight delay to ensure all fields are rendered
             setTimeout(function() {
                 // Set direct fields
                 if (direct_fields_data.length > 0) {
@@ -916,9 +1397,16 @@ function open_sync_config_dialog(frm) {
                     d.fields_dict.transforms.grid.refresh();
                 }
                 
+                // Set identifier mappings
+                if (identifier_mapping_data.length > 0) {
+                    d.fields_dict.identifier_mapping.df.data = identifier_mapping_data;
+                    d.fields_dict.identifier_mapping.grid.refresh();
+                }
+                
                 // Set hooks
                 if (cfg.hooks) {
                     d.set_value('hooks_before', cfg.hooks.before_sync || '');
+                    d.set_value('hooks_sync_name', cfg.hooks.sync_name || '');
                     d.set_value('hooks_after', cfg.hooks.after_sync || '');
                 }
                 
@@ -927,85 +1415,6 @@ function open_sync_config_dialog(frm) {
                 
                 console.log("All values set!");
             }, 300);  // Small delay to ensure dialog is fully rendered
-
-            // Save handler
-            d.fields_dict.save.$input.on('click', function() {
-                var newcfg = { 
-                    direct_fields: {}, 
-                    child_mappings: [], 
-                    default_values: {}, 
-                    transform: {}, 
-                    hooks: {}, 
-                    allow_recreate: true 
-                };
-                
-                var vals = d.get_values();
-                console.log("Dialog values:", vals);
-                
-                // Process direct fields
-                if (vals.direct_fields) {
-                    for (var i = 0; i < vals.direct_fields.length; i++) {
-                        var row = vals.direct_fields[i];
-                        if (row.source_field && row.target_field) {
-                            newcfg.direct_fields[row.source_field] = row.target_field;
-                        }
-                    }
-                }
-                
-                // Process child mappings
-                if (vals.child_mappings) {
-                    for (var i = 0; i < vals.child_mappings.length; i++) {
-                        var row = vals.child_mappings[i];
-                        if (row.source_table && row.target_table && row.fields_map) {
-                            try {
-                                var fields = JSON.parse(row.fields_map);
-                                newcfg.child_mappings.push({
-                                    source_table: row.source_table,
-                                    target_table: row.target_table,
-                                    fields: fields
-                                });
-                            } catch(e) {
-                                frappe.msgprint({
-                                    message: __('Invalid JSON in child fields'),
-                                    indicator: 'red'
-                                });
-                                return;
-                            }
-                        }
-                    }
-                }
-                
-                // Process default values
-                if (vals.default_values) {
-                    for (var i = 0; i < vals.default_values.length; i++) {
-                        var row = vals.default_values[i];
-                        if (row.fieldname && row.default_value) {
-                            newcfg.default_values[row.fieldname] = row.default_value;
-                        }
-                    }
-                }
-                
-                // Process transforms
-                if (vals.transforms) {
-                    for (var i = 0; i < vals.transforms.length; i++) {
-                        var row = vals.transforms[i];
-                        if (row.fieldname && row.function_path) {
-                            newcfg.transform[row.fieldname] = row.function_path;
-                        }
-                    }
-                }
-                
-                // Set hooks
-                newcfg.hooks.before_sync = vals.hooks_before;
-                newcfg.hooks.after_sync = vals.hooks_after;
-                
-                // Set allow_recreate
-                newcfg.allow_recreate = !!vals.allow_recreate;
-                
-                // Update form
-                frm.set_value('config', JSON.stringify(newcfg, null, 4));
-                d.hide();
-            });
 
             d.show();
         });
