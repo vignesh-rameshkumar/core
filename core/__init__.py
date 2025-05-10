@@ -1,5 +1,5 @@
 
-__version__ = '1.1.4'
+__version__ = '1.1.5'
 
 import frappe
 from frappe import _
@@ -139,7 +139,6 @@ def invalidate_user_cache(doc, method):
         )
         for user in users:
             cache.delete_value(_cache_key(user))
-
 
 def custom_name(self, series_format: str):
     # Only run for new documents
