@@ -135,7 +135,7 @@ class LiveSync(Document):
                     "enabled": 1,
                     "name": ["!=", self.name]
                 }
-            )  # <-- Closing parenthesis added here
+            )
 
             if existing_syncs:
                 frappe.throw(f"Circular reference detected with existing sync: {existing_syncs[0].name}")
@@ -835,17 +835,54 @@ class LiveSync(Document):
             if not target_doc:
                 target_doc = frappe.new_doc(target_doctype)
 
-        # 9) Prevent loops, mark syncing
+        # NEW: 9) Always sync standard properties from source to target
+        try:
+            # Copy standard properties regardless of hook configuration
+            properties_to_sync = [
+                "creation", 
+                "modified", 
+                "modified_by", 
+                "owner"
+            ]
+            
+            # Check if fast mode is enabled (can be a property of self or passed in config)
+            fast_mode = getattr(self, "fast_mode", False) or self.config.get("fast_mode", False)
+            
+            # In fast mode, we directly set the properties
+            if fast_mode:
+                # Direct property copying - bypasses validation
+                for prop in properties_to_sync:
+                    if hasattr(doc, prop) and getattr(doc, prop):
+                        setattr(target_doc, prop, getattr(doc, prop))
+            else:
+                # In normal mode, we use flags to preserve properties without bypassing validation
+                # Store properties to be set after document is saved
+                target_doc._sync_properties = {}
+                for prop in properties_to_sync:
+                    if hasattr(doc, prop) and getattr(doc, prop):
+                        target_doc._sync_properties[prop] = getattr(doc, prop)
+                
+                # Set flags to preserve properties during save
+                target_doc.flags.preserve_creation = True
+                
+                # Log that we're syncing properties
+                frappe.logger().debug(
+                    f"Properties to sync: {target_doc._sync_properties}"
+                )
+        except Exception as e:
+            frappe.log_error(f"Error syncing properties: {str(e)}", "LiveSync Property Error")
+
+        # 10) Prevent loops, mark syncing
         target_doc._syncing = True
 
         try:
-            # 10) Process all field mappings
+            # 11) Process all field mappings
             self._process_field_mappings(doc, target_doc, is_forward)
 
-            # 11) Process child tables
+            # 12) Process child tables
             self._process_child_tables(doc, target_doc, is_forward)
 
-            # 12) Save the target document
+            # 13) Save the target document
             # FIXED: Use safer getattr instead of direct dictionary access for __islocal
             is_new = getattr(target_doc, "__islocal", True)
             
@@ -858,20 +895,41 @@ class LiveSync(Document):
                     self._process_field_mappings(doc, existing_doc, is_forward)
                     self._process_child_tables(doc, existing_doc, is_forward)
                     existing_doc._syncing = True
+                    
+                    # Transfer property sync data
+                    if hasattr(target_doc, "_sync_properties"):
+                        existing_doc._sync_properties = target_doc._sync_properties
+                        existing_doc.flags.preserve_creation = True
+                    
                     existing_doc.save(ignore_permissions=True)
+                    
+                    # Apply properties after save for non-fast mode
+                    if not fast_mode and hasattr(existing_doc, "_sync_properties"):
+                        self._apply_properties_after_save(existing_doc)
+                    
                     action = "Update"
                     # Use the existing doc as our target for after_sync hook
                     target_doc = existing_doc
                 else:
                     # Insert new document
                     target_doc.insert(ignore_permissions=True)
+                    
+                    # Apply properties after insert for non-fast mode
+                    if not fast_mode and hasattr(target_doc, "_sync_properties"):
+                        self._apply_properties_after_save(target_doc)
+                    
                     action = "Insert"
             else:
                 # Update existing document
                 target_doc.save(ignore_permissions=True)
+                
+                # Apply properties after save for non-fast mode
+                if not fast_mode and hasattr(target_doc, "_sync_properties"):
+                    self._apply_properties_after_save(target_doc)
+                
                 action = "Update"
 
-            # 13) Execute after_sync hooks if configured
+            # 14) Execute after_sync hooks if configured
             if self.config.get("hooks", {}).get("after_sync"):
                 try:
                     hook_name = self.config["hooks"]["after_sync"]
@@ -880,11 +938,54 @@ class LiveSync(Document):
                 except Exception as e:
                     frappe.log_error(f"Error in after_sync hook: {str(e)}", "LiveSync Hook Error")
 
-            # 14) Log the sync
+            # 15) Log the sync
             self._log_sync(doc, target_doc, action, is_forward)
             
         finally:
             target_doc._syncing = False
+
+    def _apply_properties_after_save(self, doc):
+        """
+        Apply synced properties using direct DB update after document is saved.
+        This ensures timestamps and ownership are preserved without bypassing validations.
+        """
+        try:
+            if not hasattr(doc, "_sync_properties") or not doc._sync_properties:
+                return
+                
+            # Get properties to apply
+            properties = doc._sync_properties
+            
+            # Build SQL SET clause parts and values
+            set_parts = []
+            values = []
+            
+            for field, value in properties.items():
+                if value:
+                    set_parts.append(f"`{field}` = %s")
+                    values.append(value)
+            
+            # Skip if no fields to update
+            if not set_parts:
+                return
+                
+            # Execute direct SQL update
+            set_clause = ", ".join(set_parts)
+            sql = f"UPDATE `tab{doc.doctype}` SET {set_clause} WHERE name = %s"
+            values.append(doc.name)
+            
+            frappe.db.sql(sql, tuple(values))
+            frappe.db.commit()
+            
+            # Log successful property sync
+            frappe.logger().debug(
+                f"Applied synced properties to {doc.doctype} {doc.name}"
+            )
+        except Exception as e:
+            frappe.log_error(
+                f"Error applying properties after save: {str(e)}\n{frappe.get_traceback()}",
+                "LiveSync Property Error"
+            )
             
     def _check_sync_conditions(self, doc, is_forward):
         """Quick check if doc meets sync conditions"""
