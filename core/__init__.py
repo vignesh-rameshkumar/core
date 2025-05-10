@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 import json
 from datetime import datetime
+import re
+from frappe.utils import now_datetime
 
 @frappe.whitelist()
 def get_roles(module=None):
@@ -137,3 +139,46 @@ def invalidate_user_cache(doc, method):
         )
         for user in users:
             cache.delete_value(_cache_key(user))
+
+def custom_name(self, series_format: str):
+    # Only run for new documents
+    if not getattr(self, "__islocal", False):
+        return  # Exit early if doc is not new
+
+    """
+    Sets a custom name on the doc based on the provided series format.
+    Format example: "PV_MMYY_####", "PVS_MMYY_##", etc.
+    - Counter resets every month.
+    - Series format must contain a fixed prefix and hash placeholders for counter (e.g., ####).
+    - MMYY is automatically replaced based on current date.
+    """
+
+    current_date = now_datetime()
+    mmyy = current_date.strftime("%m%y")
+    series_prefix = series_format.replace("MMYY", mmyy)
+
+    match = re.match(r"(.+?)_#+$", series_prefix)
+    if not match:
+        frappe.throw("Invalid series format. Use format like 'PV_MMYY_####'.")
+
+    prefix = match.group(1)
+    hash_count = series_prefix.count("#")
+    like_pattern = f"{prefix}_%"
+
+    last_name = frappe.db.get_value(
+        self.doctype,
+        filters={"name": ["like", like_pattern]},
+        fieldname="name",
+        order_by="creation desc"
+    )
+
+    if last_name and last_name.startswith(prefix):
+        last_counter_str = last_name.replace(f"{prefix}_", "")
+        last_counter = int(last_counter_str) if last_counter_str.isdigit() else 0
+    else:
+        last_counter = 0
+
+    new_counter = last_counter + 1
+    padded_counter = str(new_counter).zfill(hash_count)
+
+    self.name = f"{prefix}_{padded_counter}"
