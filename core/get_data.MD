@@ -1,4 +1,4 @@
-GET Data API - Configuration-Driven Data Retrieval Engine
+# GET Data API - Configuration-Driven Data Retrieval Engine
 🎯 Purpose & Philosophy
 The GET Data API is a high-performance, configuration-driven data retrieval engine built on top of Frappe Framework. It fundamentally changes how APIs are developed by eliminating repetitive code and enforcing consistent patterns across your entire application.
 Why This Engine Exists
@@ -35,9 +35,6 @@ WHERE parent.status = 'Open' LIMIT 20
 Why it's faster:
 
 ✅ No ORM overhead
-✅ Single query instead of N+1 queries
-✅ Optimized JOINs for child tables
-✅ Direct database access
 
 2. Smart Caching Strategy
 python# Frappe REST API
@@ -84,7 +81,7 @@ python# Frappe REST API
 |----------|-------------|--------------|-------------|
 | Simple List (20 records) | 180ms | 45ms | **75% faster** |
 | With Child Table | 450ms | 120ms | **73% faster** |
-| With Related Parents | 620ms | 185ms | **70% faster** |
+| Related Parents | 620ms | 185ms | **70% faster** |
 | Complex Filters | 380ms | 95ms | **75% faster** |
 | Bulk Retrieval (100 records) | 2800ms | 650ms | **77% faster** |
 
@@ -92,18 +89,18 @@ python# Frappe REST API
 
 ## 📋 Table of Contents
 
-1. [Quick Start](#-quick-start)
-2. [Configuration Structure](#-configuration-structure)
-3. [Basic Examples](#-basic-examples)
-4. [Advanced Features](#-advanced-features)
-5. [Filters & Operators](#-filters--operators)
-6. [Child Tables](#-child-tables)
-7. [Related Data](#-related-data)
-8. [Custom Messages](#-custom-messages)
-9. [Security & Permissions](#-security--permissions)
-10. [Error Handling](#-error-handling)
-11. [Limitations](#-limitations)
-12. [Best Practices](#-best-practices)
+1. Quick Start  
+2. Configuration Structure  
+3. Basic Examples  
+4. Advanced Features  
+5. Filters & Operators  
+6. Child Tables  
+7. Related Data  
+8. Custom Messages  
+9. Security & Permissions  
+10. Error Handling  
+11. Limitations  
+12. Best Practices  
 
 ---
 
@@ -112,12 +109,17 @@ python# Frappe REST API
 ### Step 1: Create Configuration File
 
 Create a configuration file in your app:
+
 ```
 your_app/
 └── config/
     └── api_configs.py
-Step 2: Define Your First GET Configuration
-python# your_app/config/api_configs.py
+```
+
+### Step 2: Define Your First GET Configuration
+
+```python
+# your_app/config/api_configs.py
 
 GET_CONFIGS = {
     "get_users": {
@@ -129,10 +131,18 @@ GET_CONFIGS = {
         "search_fields": ["email", "full_name"]
     }
 }
-Step 3: Call the API
-bashGET /api/method/core.factory.api.get_data?key=get_users
+```
+
+### Step 3: Call the API
+
+```
+GET /api/method/core.factory.api.get_data?key=get_users
+```
+
 Response:
-json{
+
+```json
+{
     "status": "success",
     "status_code": 200,
     "message": "Data loaded successfully",
@@ -151,17 +161,28 @@ json{
         "pages": 1
     }
 }
+```
+
 That's it! No additional code required.
 
-📐 Configuration Structure
-Minimum Required Configuration
-python{
-    "doctype": "User",           # Required: Target DocType
-    "fields": ["name", "email"], # Required: Fields to fetch
-    "roles": ["All"]             # Required: Permitted roles
+---
+
+## 📐 Configuration Structure
+
+### Minimum Required Configuration
+
+```python
+{
+    "doctype": "User",
+    "fields": ["name", "email"],
+    "roles": ["All"]
 }
-Complete Configuration Options
-python{
+```
+
+### Complete Configuration Options
+
+```python
+{
     # ============================================
     # REQUIRED FIELDS
     # ============================================
@@ -172,28 +193,25 @@ python{
     # ============================================
     # BASIC SETTINGS
     # ============================================
-    "order_by": "creation desc",           # Default sort order
-    "limit": 20,                           # Default page size (max: 100)
-    "date_field": "transaction_date",      # Field for date filtering
-    "search_fields": ["name", "customer"], # Fields for text search
+    "order_by": "creation desc",
+    "limit": 20,
+    "date_field": "transaction_date",
+    "search_fields": ["name", "customer"],
     
     # ============================================
     # FILTERS
     # ============================================
     "filters": {
-        # Static filters (always applied)
         "static": {
             "docstatus": 1,
             "status": {"!=": "Cancelled"}
         },
         
-        # OR-based static filters (alternative conditions)
         "or_static": {
             "status": "Draft",
             "workflow_state": "Pending"
         },
         
-        # Optional filters (from query parameters)
         "optional": ["customer", "territory", "status"]
     },
     
@@ -202,9 +220,9 @@ python{
     # ============================================
     "child_table": {
         "doctype": "Sales Order Item",
-        "parent_field": "items",           # Field name in parent DocType
+        "parent_field": "items",
         "fields": ["item_code", "qty", "rate", "amount"],
-        "result_field_name": "items",      # Key name in response
+        "result_field_name": "items",
         "order_by": "idx asc"
     },
     
@@ -214,10 +232,10 @@ python{
     "related_parents": [
         {
             "doctype": "Customer",
-            "link_field": "customer",      # Field in main DocType
-            "rel_field": "name",          # Matching field in related DocType
+            "link_field": "customer",
+            "rel_field": "name",
             "fields": ["name", "customer_name", "territory"],
-            "is_single": True,            # True = object, False = array
+            "is_single": True,
             "result_field_name": "customer_details"
         }
     ],
@@ -225,7 +243,7 @@ python{
     # ============================================
     # RESPONSE FORMAT
     # ============================================
-    "flat_payload": False,                # True = flatten child data into parent
+    "flat_payload": False,
     
     # ============================================
     # CUSTOM MESSAGES
@@ -236,15 +254,20 @@ python{
     },
     
     # ============================================
-    # DEPARTMENT-BASED ACCESS (Optional)
+    # DEPARTMENT-BASED ACCESS
     # ============================================
-    "dept": ["Sales", "Accounts"]         # Grant access by department
+    "dept": ["Sales", "Accounts"]
 }
+```
+
+---
 
 🎓 Basic Examples
 Example 1: Simple User List
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "list_users": {
         "doctype": "User",
         "fields": ["name", "email", "full_name", "enabled"],
@@ -253,10 +276,18 @@ pythonGET_CONFIGS = {
         "limit": 50
     }
 }
+```
+
 API Call:
-bashGET /api/method/core.factory.api.get_data?key=list_users
+
+```
+GET /api/method/core.factory.api.get_data?key=list_users
+```
+
 Response:
-json{
+
+```json
+{
     "status": "success",
     "status_code": 200,
     "message": "Data loaded successfully",
@@ -275,10 +306,15 @@ json{
         "pages": 1
     }
 }
+```
 
-Example 2: With Static Filters
+---
+
+Example 2: With Static Filters  
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "active_employees": {
         "doctype": "Employee",
         "fields": ["name", "employee_name", "department", "designation"],
@@ -286,63 +322,83 @@ pythonGET_CONFIGS = {
         "filters": {
             "static": {
                 "status": "Active",
-                "company": "frappe.defaults.get_defaults().company"  # Dynamic value
+                "company": "frappe.defaults.get_defaults().company"
             }
         },
         "order_by": "employee_name asc"
     }
 }
-API Call:
-bashGET /api/method/core.factory.api.get_data?key=active_employees
+```
 
-Example 3: With Search & Pagination
+API Call:
+
+```
+GET /api/method/core.factory.api.get_data?key=active_employees
+```
+
+---
+
+Example 3: Search & Pagination  
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "search_customers": {
         "doctype": "Customer",
         "fields": ["name", "customer_name", "territory", "customer_type"],
         "roles": ["Sales User"],
-        "search_fields": ["customer_name", "name"],  # Searchable fields
+        "search_fields": ["customer_name", "name"],
         "limit": 20,
         "order_by": "customer_name asc"
     }
 }
-API Call:
-bash# Search for customers
+```
+
+API Examples:
+
+```
 GET /api/method/core.factory.api.get_data?key=search_customers&query=john
-
-# With pagination
 GET /api/method/core.factory.api.get_data?key=search_customers&page=2&limit=10
-
-# Combined
 GET /api/method/core.factory.api.get_data?key=search_customers&query=john&page=2&limit=10
+```
 
-Example 4: With Date Range Filtering
+---
+
+Example 4: Date Range Filtering  
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "sales_orders_by_date": {
         "doctype": "Sales Order",
         "fields": ["name", "customer", "transaction_date", "grand_total"],
         "roles": ["Sales User"],
-        "date_field": "transaction_date",  # Field used for date filtering
+        "date_field": "transaction_date",
         "order_by": "transaction_date desc"
     }
 }
-API Call:
-bash# Get orders from specific date range
+```
+
+API Examples:
+
+```
 GET /api/method/core.factory.api.get_data?key=sales_orders_by_date&from_date=2024-01-01&to_date=2024-12-31
-
-# Get orders from a specific date onwards
 GET /api/method/core.factory.api.get_data?key=sales_orders_by_date&from_date=2024-06-01
-
-# Get orders up to a specific date
 GET /api/method/core.factory.api.get_data?key=sales_orders_by_date&to_date=2024-12-31
+```
 
-🔧 Advanced Features
-1. Optional Filters with Operators
-The API supports Django-ORM style suffix operators for flexible querying.
+---
+
+# 🔧 Advanced Features
+
+## 1. Optional Filters with Operators
+
+Supports Django-style operator suffixes.
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "filter_employees": {
         "doctype": "Employee",
         "fields": ["name", "employee_name", "date_of_joining", "salary"],
@@ -352,83 +408,51 @@ pythonGET_CONFIGS = {
         }
     }
 }
-API Calls with Operators:
-bash# Exact match (default)
+```
+
+Operator Examples:
+
+```
 ?department=Sales
-
-# Not equal
 ?department__ne=Sales
-
-# Greater than
 ?salary__gt=50000
-
-# Greater than or equal
 ?salary__gte=50000
-
-# Less than
 ?date_of_joining__lt=2024-01-01
-
-# Less than or equal
 ?date_of_joining__lte=2024-12-31
-
-# IN (multiple values)
 ?department__in=Sales,Marketing,IT
-
-# NOT IN
 ?department__nin=Intern,Contract
-
-# LIKE (contains)
 ?employee_name__like=john
-
-# Starts with
 ?employee_name__startswith=john
-
-# Ends with
-?email__endswith=@company.com
-
-# Contains
+?employee_name__endswith=@company.com
 ?designation__contains=manager
-
-# Is NULL
 ?resignation_date__isnull=true
-
-# Is NOT NULL
-?resignation_date__notnull=true
-
-# Is Empty (NULL or empty string)
 ?middle_name__isempty=true
-
-# Is Not Empty
-?middle_name__notempty=true
-
-# Date operations
-?date_of_joining__date=2024-01-15
-?date_of_joining__year=2024
-?date_of_joining__month=6
-?date_of_joining__day=15
-
-# Between (range)
 ?salary__between=30000,50000
-?date_of_joining__range=2024-01-01,2024-12-31
-Combined Example:
-bashGET /api/method/core.factory.api.get_data?key=filter_employees&department__in=Sales,Marketing&salary__gte=50000&date_of_joining__year=2024
+```
 
-2. Static vs OR-Static Filters
-Use Case: Apply alternative filter groups with OR logic.
+Combined Example:
+
+```
+GET /api/method/core.factory.api.get_data?key=filter_employees&department__in=Sales,Marketing&salary__gte=50000&date_of_joining__year=2024
+```
+
+---
+
+## 2. Static vs OR-Static Filters
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "pending_or_draft_orders": {
         "doctype": "Sales Order",
         "fields": ["name", "customer", "status", "workflow_state"],
         "roles": ["Sales User"],
         "filters": {
-            # Group A: Orders from Sales department
             "static": {
                 "department": "Sales",
                 "docstatus": 1
             },
-            
-            # Group B: OR orders in specific states
             "or_static": {
                 "status": "Draft",
                 "workflow_state": "Pending Approval"
@@ -436,22 +460,24 @@ pythonGET_CONFIGS = {
         }
     }
 }
-Generated SQL WHERE Clause:
-sqlWHERE (
+```
+
+Generated SQL:
+
+```sql
+WHERE (
     (department = 'Sales' AND docstatus = 1)
     OR
     (status = 'Draft' AND workflow_state = 'Pending Approval')
 )
-When to use:
+```
 
-Multi-criteria filtering with fallback conditions
-Department-based OR role-based access
-Status-based OR workflow-based filtering
+---
 
+## 3. Multi-Field Search
 
-3. Multi-Field Search
-Configuration:
-pythonGET_CONFIGS = {
+```python
+GET_CONFIGS = {
     "search_items": {
         "doctype": "Item",
         "fields": ["name", "item_name", "item_code", "item_group"],
@@ -460,79 +486,73 @@ pythonGET_CONFIGS = {
         "order_by": "item_name asc"
     }
 }
-API Call:
-bash# Single search term (searches across all search_fields)
+```
+
+API:
+
+```
 GET /api/method/core.factory.api.get_data?key=search_items&query=laptop
-
-# Multiple search terms (comma-separated)
 GET /api/method/core.factory.api.get_data?key=search_items&query=laptop,dell,i7
-Generated SQL (Single Term):
-sqlWHERE (
-    item_name LIKE '%laptop%' 
-    OR item_code LIKE '%laptop%' 
-    OR description LIKE '%laptop%'
-)
-Generated SQL (Multiple Terms):
-sqlWHERE (
-    item_name LIKE '%laptop%' OR item_code LIKE '%laptop%' OR description LIKE '%laptop%'
-    OR item_name LIKE '%dell%' OR item_code LIKE '%dell%' OR description LIKE '%dell%'
-    OR item_name LIKE '%i7%' OR item_code LIKE '%i7%' OR description LIKE '%i7%'
-)
+```
 
-👨‍👩‍👧 Child Tables
-Basic Child Table
+SQL Generated:
+
+```
+item_name LIKE '%laptop%' OR item_code LIKE '%laptop%' ...
+```
+
+---
+
+# 👨‍👩‍👧 Child Tables
+
+## Basic Child Table
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "sales_orders_with_items": {
         "doctype": "Sales Order",
         "fields": ["name", "customer", "grand_total"],
         "roles": ["Sales User"],
-        
         "child_table": {
             "doctype": "Sales Order Item",
-            "parent_field": "items",  # Field name in Sales Order DocType
+            "parent_field": "items",
             "fields": ["item_code", "qty", "rate", "amount"],
-            "result_field_name": "items",  # Key in response JSON
+            "result_field_name": "items",
             "order_by": "idx asc"
         }
     }
 }
-Response (Nested Structure):
-json{
-    "status": "success",
-    "data": [
-        {
-            "name": "SO-001",
-            "customer": "John Doe",
-            "grand_total": 5000,
-            "items": [
-                {
-                    "item_code": "ITEM-001",
-                    "qty": 2,
-                    "rate": 1000,
-                    "amount": 2000
-                },
-                {
-                    "item_code": "ITEM-002",
-                    "qty": 3,
-                    "rate": 1000,
-                    "amount": 3000
-                }
-            ]
-        }
+```
+
+Response:
+
+```json
+{
+    "name": "SO-001",
+    "customer": "John Doe",
+    "grand_total": 5000,
+    "items": [
+        {"item_code": "ITEM-001", "qty": 2, "rate": 1000, "amount": 2000},
+        {"item_code": "ITEM-002", "qty": 3, "rate": 1000, "amount": 3000}
     ]
 }
+```
 
-Flat Payload Mode
+---
+
+## Flat Payload Mode
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "sales_orders_flat": {
         "doctype": "Sales Order",
         "fields": ["name", "customer", "grand_total"],
         "roles": ["Sales User"],
-        
-        "flat_payload": True,  # Enable flat mode
-        
+        "flat_payload": True,
         "child_table": {
             "doctype": "Sales Order Item",
             "parent_field": "items",
@@ -540,104 +560,91 @@ pythonGET_CONFIGS = {
         }
     }
 }
-Response (Flat Structure - Only First Child Record):
-json{
-    "status": "success",
-    "data": [
-        {
-            "name": "SO-001",
-            "customer": "John Doe",
-            "grand_total": 5000,
-            "item_code": "ITEM-001",
-            "qty": 2,
-            "rate": 1000,
-            "amount": 2000
-        }
-    ]
+```
+
+Response (only first child row):
+
+```json
+{
+    "name": "SO-001",
+    "customer": "John Doe",
+    "grand_total": 5000,
+    "item_code": "ITEM-001",
+    "qty": 2,
+    "rate": 1000,
+    "amount": 2000
 }
-Use Cases:
+```
 
-CSV export compatibility
-Excel-like flat data structure
-Data visualization tools expecting flat data
-Legacy system integration
+---
 
-⚠️ Important: Flat mode only includes the first child record per parent.
+## Child Table with Filters
 
-Child Table with Filters
-Configuration:
-pythonGET_CONFIGS = {
-    "sales_orders_with_filters": {
-        "doctype": "Sales Order",
-        "fields": ["name", "customer"],
-        "roles": ["Sales User"],
-        
-        "child_table": {
-            "doctype": "Sales Order Item",
-            "parent_field": "items",
-            "fields": ["item_code", "qty", "rate"],
-            
-            # Filter child records
-            "filters": {
-                "static": {
-                    "qty": {">": 5}  # Only items with qty > 5
-                }
-            }
+```python
+"child_table": {
+    "doctype": "Sales Order Item",
+    "parent_field": "items",
+    "fields": ["item_code", "qty", "rate"],
+    "filters": {
+        "static": {
+            "qty": {">": 5}
         }
     }
 }
+```
 
-Custom Parent Field Filtering
-Use Case: Filter child records based on a field in parent document (not parent name).
+---
+
+## Custom Parent Field Filtering
+
+Useful when child table linking is by another field.
+
+```python
+"use_parent_field_filter": True,
+"parent_field_name": "employee",
+"parent_field_filter_field": "employee"
+```
+
+SQL:
+
+```sql
+SELECT * FROM `tabTimesheet Detail`
+WHERE employee IN ('EMP-001', 'EMP-002')
+```
+
+---
+
+# 🔗 Related Data (Parent Lookups)
+
+## Single Related Record
+
 Configuration:
-pythonGET_CONFIGS = {
-    "timesheet_with_logs": {
-        "doctype": "Timesheet",
-        "fields": ["name", "employee", "total_hours"],
-        "roles": ["HR User"],
-        
-        "child_table": {
-            "doctype": "Timesheet Detail",
-            "parent_field": "time_logs",
-            "fields": ["activity_type", "hours", "from_time", "to_time"],
-            
-            # Filter by parent's employee field instead of parent name
-            "use_parent_field_filter": True,
-            "parent_field_name": "employee",       # Field in Timesheet
-            "parent_field_filter_field": "employee"  # Field in Timesheet Detail
-        }
-    }
-}
-Generated SQL:
-sql-- Standard behavior (use_parent_field_filter=False)
-SELECT * FROM `tabTimesheet Detail` WHERE parent IN ('TS-001', 'TS-002')
 
--- Custom behavior (use_parent_field_filter=True)
-SELECT * FROM `tabTimesheet Detail` WHERE employee IN ('EMP-001', 'EMP-002')
-
-🔗 Related Data (Parent Lookups)
-Single Related Record
-Configuration:
-pythonGET_CONFIGS = {
+```python
+GET_CONFIGS = {
     "sales_orders_with_customer": {
         "doctype": "Sales Order",
         "fields": ["name", "customer", "grand_total"],
         "roles": ["Sales User"],
-        
+
         "related_parents": [
             {
                 "doctype": "Customer",
-                "link_field": "customer",      # Field in Sales Order
-                "rel_field": "name",          # Matching field in Customer
+                "link_field": "customer",
+                "rel_field": "name",
                 "fields": ["name", "customer_name", "territory", "customer_group"],
-                "is_single": True,            # Return as object, not array
+                "is_single": True,
                 "result_field_name": "customer_details"
             }
         ]
     }
 }
+```
+
 Response:
-json{
+
+```json
+{
     "status": "success",
     "data": [
         {
@@ -653,59 +660,62 @@ json{
         }
     ]
 }
+```
 
-Multiple Related Records
+---
+
+## Multiple Related Records
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "items_with_suppliers": {
         "doctype": "Item",
         "fields": ["name", "item_name", "supplier"],
         "roles": ["Purchase User"],
-        
+
         "related_parents": [
             {
                 "doctype": "Supplier",
                 "link_field": "supplier",
                 "rel_field": "name",
                 "fields": ["name", "supplier_name", "country"],
-                "is_single": False,  # Return as array
+                "is_single": False,
                 "result_field_name": "supplier_list"
             }
         ]
     }
 }
+```
+
 Response:
-json{
-    "status": "success",
-    "data": [
-        {
-            "name": "ITEM-001",
-            "item_name": "Laptop",
-            "supplier": "SUP-001",
-            "supplier_list": [
-                {
-                    "name": "SUP-001",
-                    "supplier_name": "Tech Supplies Inc",
-                    "country": "USA"
-                },
-                {
-                    "name": "SUP-002",
-                    "supplier_name": "Global Electronics",
-                    "country": "China"
-                }
-            ]
-        }
+
+```json
+{
+    "name": "ITEM-001",
+    "item_name": "Laptop",
+    "supplier": "SUP-001",
+    "supplier_list": [
+        { "name": "SUP-001", "supplier_name": "Tech Supplies Inc", "country": "USA" },
+        { "name": "SUP-002", "supplier_name": "Global Electronics", "country": "China" }
     ]
 }
+```
 
-Multiple Related Parents
+---
+
+## Multiple Related Parents
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "sales_orders_full": {
         "doctype": "Sales Order",
         "fields": ["name", "customer", "territory", "grand_total"],
         "roles": ["Sales Manager"],
-        
+
         "related_parents": [
             {
                 "doctype": "Customer",
@@ -726,35 +736,40 @@ pythonGET_CONFIGS = {
         ]
     }
 }
-Response:
-json{
-    "status": "success",
-    "data": [
-        {
-            "name": "SO-001",
-            "customer": "CUST-001",
-            "territory": "North",
-            "grand_total": 5000,
-            "customer_info": {
-                "customer_name": "John Doe",
-                "customer_group": "Commercial"
-            },
-            "territory_info": {
-                "territory_name": "North Region",
-                "parent_territory": "All Territories"
-            }
-        }
-    ]
-}
+```
 
-Related Data with Filters
+Response:
+
+```json
+{
+    "name": "SO-001",
+    "customer": "CUST-001",
+    "territory": "North",
+    "grand_total": 5000,
+    "customer_info": {
+        "customer_name": "John Doe",
+        "customer_group": "Commercial"
+    },
+    "territory_info": {
+        "territory_name": "North Region",
+        "parent_territory": "All Territories"
+    }
+}
+```
+
+---
+
+## Related Data with Filters
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "customers_with_active_contacts": {
         "doctype": "Customer",
         "fields": ["name", "customer_name"],
         "roles": ["Sales User"],
-        
+
         "related_parents": [
             {
                 "doctype": "Contact",
@@ -762,8 +777,6 @@ pythonGET_CONFIGS = {
                 "rel_field": "link_name",
                 "fields": ["first_name", "email_id", "phone"],
                 "is_single": False,
-                
-                # Only fetch active contacts
                 "filters": {
                     "static": {
                         "status": "Active"
@@ -773,512 +786,629 @@ pythonGET_CONFIGS = {
         ]
     }
 }
+```
 
-💬 Custom Messages
-Basic Custom Messages
+---
+
+# 💬 Custom Messages
+
+## Basic Custom Messages
+
 Configuration:
-pythonGET_CONFIGS = {
+
+```python
+GET_CONFIGS = {
     "get_products": {
         "doctype": "Item",
         "fields": ["name", "item_name", "standard_rate"],
         "roles": ["Sales User"],
-        
+
         "custom_messages": {
             "success_message": "Products loaded successfully!",
             "error_message": "Unable to load products. Please contact support."
         }
     }
 }
+```
+
 Success Response:
-json{
+
+```json
+{
     "status": "success",
     "status_code": 200,
-    "message": "Products loaded successfully!",  // Custom message
+    "message": "Products loaded successfully!",
     "data": [...]
 }
+```
+
 Error Response:
-json{
+
+```json
+{
     "status": "error",
     "status_code": 500,
-    "message": "Unable to load products. Please contact support."  // Custom message
+    "message": "Unable to load products. Please contact support."
 }
+```
 
-Use Cases for Custom Messages
-python# User-facing API
+---
+
+## Use Cases for Custom Messages
+
+```python
+# User Dashboard
 "custom_messages": {
     "success_message": "Welcome! Your dashboard is ready.",
     "error_message": "Something went wrong. Please refresh the page."
 }
 
-# Integration API
+# Integration
 "custom_messages": {
     "success_message": "Data synchronized successfully.",
     "error_message": "Sync failed. Check integration logs for details."
 }
 
-# Mobile API
+# Mobile
 "custom_messages": {
     "success_message": "Orders loaded.",
     "error_message": "Connection failed. Check your internet."
 }
 
-# Analytics API
+# Analytics
 "custom_messages": {
     "success_message": "Report generated successfully.",
     "error_message": "Report generation failed. Try reducing date range."
 }
+```
+
 Rules:
 
-Maximum 500 characters per message
-Must be non-empty strings
-Only success_message and error_message are supported
+- Max 500 chars  
+- Only success_message & error_message allowed  
+- Must be non-empty strings  
 
+---
 
-🔒 Security & Permissions
-Role-Based Access Control
-Configuration:
-pythonGET_CONFIGS = {
+# 🔒 Security & Permissions
+
+## Role-Based Access Control
+
+```python
+GET_CONFIGS = {
     "hr_data": {
         "doctype": "Employee",
         "fields": ["name", "employee_name", "department"],
-        "roles": ["HR Manager", "HR User"],  # Only these roles can access
+        "roles": ["HR Manager", "HR User"]
     }
 }
+```
+
 Behavior:
 
-User must have at least one of the specified roles
-System validates roles on every request
-Invalid access returns 403 Forbidden
+- User must have at least one required role  
+- Otherwise → 403 Forbidden  
 
+---
 
-Department-Based Access Control
-Configuration:
-pythonGET_CONFIGS = {
+## Department-Based Access Control
+
+```python
+GET_CONFIGS = {
     "department_employees": {
         "doctype": "Employee",
         "fields": ["name", "employee_name", "department"],
-        "roles": ["Employee"],  # Broad role
-        
-        "dept": ["Sales", "Marketing"],  # Department restriction
-        
+        "roles": ["Employee"],
+        "dept": ["Sales", "Marketing"],
         "filters": {
             "static": {
-                "department": "frappe.defaults.get_user().department"  # Dynamic filter
+                "department": "frappe.defaults.get_user().department"
             }
         }
     }
 }
+```
+
 Access Logic:
 
-Check if user has required role → If NO, return 403
-If YES, check department → If user's department in allowed list, grant access
-Apply dynamic department filter to data
+1. User must have required role  
+2. User’s department must be in allowed list  
+3. Static filter further limits data  
 
-Use Case:
+---
 
-Sales team sees only Sales department data
-Marketing team sees only Marketing department data
-HR Manager (with HR Manager role) sees all
+## SQL Injection Protection
 
+Safe practices:
 
-SQL Injection Protection
-Built-in Protection:
-python# User input is NEVER directly concatenated into SQL
-# All values are parameterized
+- All SQL queries parameterized  
+- No string concatenation  
+- Field names validated  
+- Only whitelisted operators allowed  
 
-# Safe (parameterized)
-WHERE department = %s  # Value passed separately
+Invalid operator → 422 Validation Error  
+Invalid field → 422 Validation Error  
 
-# Never done (UNSAFE - not in this API)
-WHERE department = '" + user_input + "'  # SQL injection risk
-Operator Validation:
-python# Only whitelisted operators allowed
-SAFE_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', 'IN', 'NOT_IN', 'LIKE', ...]
+---
 
-# Invalid operator rejected
-?field__invalid_op=value  # Returns 422 Validation Error
-Field Validation:
-python# All fields validated against DocType schema
-# Non-existent fields rejected
+## Rate Limiting (Coming Soon)
 
-?non_existent_field=value  # Returns 422 Validation Error
-
-Rate Limiting (Coming Soon)
-Planned Configuration:
-pythonGET_CONFIGS = {
-    "public_api": {
-        "doctype": "Item",
-        "fields": ["name", "item_name"],
-        "roles": ["All"],
-        
-        "rate_limit": {
-            "requests_per_minute": 60,
-            "requests_per_hour": 1000
-        }
-    }
+```python
+"rate_limit": {
+    "requests_per_minute": 60,
+    "requests_per_hour": 1000
 }
+```
 
-⚠️ Error Handling
-Validation Errors (422)
-Scenario: Invalid field, operator, or filter
-Example Request:
-bashGET /api/method/core.factory.api.get_data?key=get_users&invalid_field=value
+---
+
+# ⚠️ Error Handling
+
+### 422 — Validation Error  
+Invalid field / operator / filter.
+
+Example:
+
+```
+GET ?invalid_field=value
+```
+
 Response:
-json{
+
+```json
+{
     "status": "error",
     "status_code": 422,
     "message": "Invalid fields for User: invalid_field"
 }
+```
 
-Permission Errors (403)
-Scenario: User lacks required role
-Example Request:
-bashGET /api/method/core.factory.api.get_data?key=admin_only_data
-Response:
-json{
+---
+
+### 403 — Permission Denied
+
+```json
+{
     "status": "error",
     "status_code": 403,
     "message": "Access denied. You don't have the required permissions."
 }
+```
 
-Configuration Errors (400)
-Scenario: Invalid or missing configuration key
-Example Request:
-bashGET /api/method/core.factory.api.get_data?key=non_existent_config
-Response:
-json{
+---
+
+### 400 — Configuration Error
+
+```json
+{
     "status": "error",
     "status_code": 400,
     "message": "Invalid or missing configuration key."
 }
+```
 
-Internal Errors (500)
-Scenario: Database error, unexpected exception
-Response:
-json{
+---
+
+### 500 — Internal Error
+
+```json
+{
     "status": "error",
     "status_code": 500,
     "message": "Internal server error. Please try again later."
 }
-Developer Mode (Additional Debug Info):
-json{
-    "status": "error",
-    "status_code": 500,
-    "message": "Internal server error. Please try again later.",
-    "_debug": {
-        "exception": "OperationalError",
-        "traceback": "...",
-        "query": "SELECT * FROM ..."
-    }
+```
+
+When developer mode is on:
+
+```json
+"_debug": {
+    "exception": "OperationalError",
+    "traceback": "...",
+    "query": "SELECT ..."
 }
+```
 
-🚫 Limitations & Conditions
-Hard Limits
-LimitValueReasonMax records per page100Prevent memory exhaustionMax search fields10Query performanceMax related parents5Join complexityMax filter depthNo nested filtersSQL complexityMax custom message length500 charsResponse size
+---
 
-Behavioral Limitations
-1. Flat Payload Mode
-python"flat_payload": True
-Limitation: Only the first child record is included.
+# 🚫 Limitations & Conditions
+
+## Hard Limits
+
+| Limit | Value | Reason |
+|-------|-------|--------|
+| Max records per page | **100** | Prevent memory exhaustion |
+| Max search fields | **10** | Query performance |
+| Max related parents | **5** | Join complexity |
+| Max filter depth | **No nested filters** | SQL complexity |
+| Max custom message length | **500 chars** | Response size |
+
+---
+
+## Behavioral Limitations
+
+### 1. Flat Payload Mode
+
+```python
+"flat_payload": True
+```
+
+⚠ **Only the first child row per parent is returned.**
+
 Example:
-json// Parent has 3 child items, but only first is returned
+
+```json
 {
     "name": "SO-001",
-    "item_code": "ITEM-001",  // First child
+    "item_code": "ITEM-001",
     "qty": 2
 }
-Solution: Use nested mode (flat_payload: False) for complete child data.
+```
 
-2. System Fields
-Available System Fields:
+Solution: Disable flat mode.
 
-name (document name)
-creation (creation timestamp)
-modified (last modified timestamp)
-owner (creator user)
-modified_by (last modifier)
-_user_tags (tags)
-_comments (comments count)
-_assign (assigned users)
-_liked_by (liked by users)
+---
 
-Not Available:
+### 2. System Fields
 
-docstatus (use explicit field in config)
-idx (child table index - not recommended for API responses)
+Supported system fields:
 
+- name  
+- creation  
+- modified  
+- owner  
+- modified_by  
+- _user_tags  
+- _comments  
+- _assign  
+- _liked_by  
 
-3. Dynamic Values in Static Filters
+❌ **Not supported:**  
+- Computed fields  
+- Special fields like `docstatus` unless explicitly fetched  
+
+---
+
+### 3. Dynamic Values in Static Filters
+
 Supported:
-python"filters": {
-    "static": {
-        "company": "frappe.defaults.get_defaults().company",  # ✅ Works
-        "owner": "frappe.session.user"  # ✅ Works
-    }
-}
+
+```python
+"company": "frappe.defaults.get_defaults().company"
+"owner": "frappe.session.user"
+```
+
 Not Supported:
-python"filters": {
-    "static": {
-        "date": "today()"  # ❌ Doesn't work
-    }
-}
-Solution: Use optional filters with dynamic values from API parameters.
 
-4. OR Logic in Optional Filters
-Not Supported:
-python# Cannot do: (department=Sales OR department=Marketing) via optional filters
-Solution: Use or_static filters or __in operator:
-bash?department__in=Sales,Marketing
+```python
+"date": "today()"
+```
 
-5. Computed Fields
-Not Supported:
-python# Cannot fetch computed fields directly
-"fields": ["computed_field"]  # ❌ Doesn't work
-Solution: Use related_parents to fetch data from linked DocTypes.
+Alternative: use optional filter with API parameter.
 
-6. Nested Child Tables
-Not Supported:
-python# Cannot fetch grandchild tables
-Sales Order → Items → Item Taxes  # ❌ Only 2 levels deep
-Solution: Create separate API for grandchild data.
+---
 
-7. Aggregations
-Not Supported:
-python# Cannot do SUM, AVG, COUNT, etc. in response
-"fields": ["SUM(amount)"]  # ❌ Doesn't work
-Solution: Perform aggregations in client application or create custom report API.
+### 4. OR Logic in Optional Filters  
+Not supported directly.
 
-8. File Attachments
-Not Supported:
-python# Cannot fetch file attachment details directly
-"fields": ["attachments"]  # ❌ Returns None
-Solution: Query Attachments DocType separately using attached_to_doctype and attached_to_name filters.
+❌ Invalid:
 
-Performance Considerations
-1. Large Datasets
-Issue: Fetching 1000+ records can be slow.
-Solution:
+```python
+?department=Sales OR Marketing
+```
 
-Use pagination (page and limit)
-Add specific filters to reduce dataset
-Consider background job for bulk exports
+✔ Use:
 
+```
+?department__in=Sales,Marketing
+```
 
-2. Complex Joins
-Issue: Multiple related parents + child table = slow query.
-Solution:
+---
 
-Limit related parents to 2-3
-Use specific filters to reduce joins
-Consider denormalization for frequently accessed data
+### 5. Computed Fields  
+Not supported in fields list.
 
+❌
 
-3. Full-Text Search
-Issue: LIKE queries on large tables are slow.
-Recommendation:
+```python
+"fields": ["SUM(amount)"]
+```
 
-Limit search to indexed fields
-Keep search queries specific (avoid single characters)
-Use pagination aggressively
+✔ Create a custom API/report.
 
+---
 
-Configuration Validation
-Automatic Checks on Load:
+### 6. Nested Child Tables
 
-✅ DocType exists
-✅ Fields exist in DocType
-✅ Child DocType exists
-✅ Related DocType exists
-✅ Roles are valid
-✅ No duplicate configuration keys
+❌ Not supported:
 
-Logged Warnings:
+```
+Parent → Child → Grandchild
+```
 
-⚠️ More than 3 related parents
-⚠️ More than 20 fields selected
-⚠️ Flat mode with multiple child tables
-⚠️ Missing search fields with search enabled
+Only **one child table level** is allowed.
 
+---
 
-✅ Best Practices
-1. Configuration Organization
+### 7. Aggregations  
+SUM, AVG, COUNT not supported.
+
+❌
+
+```python
+"fields": ["SUM(qty)"]
+```
+
+---
+
+### 8. File Attachments  
+Cannot fetch file details directly.
+
+❌
+
+```
+"fields": ["attachments"]
+```
+
+✔ Use File DocType queries.
+
+---
+
+# Performance Considerations
+
+### 1. Very Large Datasets  
+Fetching >1000 rows can slow down.
+
+Solutions:
+
+- Use pagination  
+- Add stronger filters  
+- Pre-index frequently filtered columns  
+
+---
+
+### 2. Heavy Related Parents  
+3+ parent lookups slow down joins.
+
+Solutions:
+
+- Limit to 2-3 related parents  
+- Reduce fields fetched  
+- Add WHERE filters  
+
+---
+
+### 3. LIKE Queries  
+LIKE '%abc%' is slow on large tables.
+
+Recommendations:
+
+- Avoid generic 1-2 letter queries  
+- Use full words  
+- Ensure indexed fields  
+
+---
+
+# Configuration Validation
+
+On config load, system validates:
+
+✔ DocType exists  
+✔ All fields exist  
+✔ Child DocType exists  
+✔ Related Doctypes exist  
+✔ Roles exist  
+✔ No duplicate config keys  
+
+Warnings:
+
+⚠ Over 3 related parents  
+⚠ Over 20 fields selected  
+⚠ Flat payload + multiple children  
+⚠ Missing search fields  
+
+---
+
+# ✅ Best Practices
+
+## 1. Organize Configurations
+
 Good:
-python# Separate file per module
-# your_app/config/sales_configs.py
-GET_CONFIGS = {
-    "sales_orders": {...},
-    "sales_invoices": {...}
-}
 
-# your_app/config/hr_configs.py
-GET_CONFIGS = {
-    "employees": {...},
-    "attendance": {...}
-}
+```
+your_app/config/sales.py
+your_app/config/hr.py
+```
+
 Bad:
-python# Single giant file
-GET_CONFIGS = {
-    "config_1": {...},
-    "config_2": {...},
-    # ... 50 more configs
-}
 
-2. Field Selection
+```
+api_configs.py with 100 configs
+```
+
+---
+
+## 2. Field Selection  
+Only fetch necessary fields.
+
 Good:
-python"fields": ["name", "customer", "grand_total", "status"]  # Only needed fields
+
+```python
+"fields": ["name", "customer", "grand_total"]
+```
+
 Bad:
-python"fields": ["*"]  # Fetches everything (NOT SUPPORTED)
-"fields": [f.fieldname for f in frappe.get_meta("Sales Order").fields]  # Too many
-Rule: Only fetch fields you actually need.
 
-3. Filter Strategy
+```python
+"fields": ["*"]
+```
+
+---
+
+## 3. Filter Strategy
+
 Good:
-python"filters": {
-    "static": {
-        "docstatus": 1,  # Always submitted
-        "company": "frappe.defaults.get_defaults().company"
-    },
-    "optional": ["customer", "territory", "status"]  # User filters
-}
+
+```python
+"static": { "docstatus": 1 },
+"optional": ["customer", "territory"]
+```
+
 Bad:
-python"filters": {
-    "optional": ["customer", "territory", "status", "docstatus", "company"]
-}
-# Allows users to override security filters
-Rule: Static filters for security, optional for user choice.
 
-4. Child Table Best Practices
+```python
+"optional": ["docstatus"]
+```
+
+---
+
+## 4. Child Table Best Practices
+
+Good (4–5 fields):
+
+```python
+"fields": ["item_code", "qty", "rate"]
+```
+
+Bad (20+ fields):
+
+```python
+"fields": ["*", ...many fields...]
+```
+
+---
+
+## 5. Related Parent Best Practices
+
 Good:
-python"child_table": {
-    "doctype": "Sales Order Item",
-    "parent_field": "items",
-    "fields": ["item_code", "qty", "rate", "amount"],  # Essential fields only
-    "order_by": "idx asc"
-}
+
+```python
+"fields": ["customer_name", "territory"]
+```
+
 Bad:
-python"child_table": {
-    "doctype": "Sales Order Item",
-    "parent_field": "items",
-    "fields": [...30 fields...]  # Too many fields
-}
-Rule: Keep child fields minimal for performance.
 
-5. Related Data Best Practices
+```python
+"fields": [... all fields ...]
+```
+
+---
+
+## 6. Naming Conventions
+
 Good:
-python"related_parents": [
-    {
-        "doctype": "Customer",
-        "link_field": "customer",
-        "rel_field": "name",
-        "fields": ["customer_name", "territory"],  # 2-3 fields
-        "is_single": True
-    }
-]
+
+- `get_active_employees`  
+- `search_customers_by_name`  
+- `list_pending_orders`  
+
 Bad:
-python"related_parents": [
-    {
-        "doctype": "Customer",
-        "link_field": "customer",
-        "rel_field": "name",
-        "fields": [... all customer fields ...],  # Too many
-        "is_single": True
-    },
-    # ... 5 more related parents
-]
-Rule: Maximum 2-3 related parents, 3-5 fields each.
 
-6. Naming Conventions
+- `get1`  
+- `employee`  
+- `temp_api`  
+
+---
+
+## 7. Search Field Selection
+
 Good:
-pythonGET_CONFIGS = {
-    "get_active_employees": {...},       # Clear action
-    "search_customers_by_name": {...},   # Descriptive
-    "list_pending_orders": {...}         # Specific
-}
+
+```
+search_fields = ["customer_name", "email"]
+```
+
 Bad:
-pythonGET_CONFIGS = {
-    "api1": {...},           # Meaningless
-    "employee": {...},       # Too generic
-    "get_data_123": {...}    # Unclear
-}
-Rule: Use descriptive, action-oriented names.
 
-7. Search Field Selection
+```
+search_fields = ["name", "modified"]
+```
+
+---
+
+## 8. Clear Error Messages
+
 Good:
-python"search_fields": ["customer_name", "email"]  # Human-readable fields
+
+```
+"error_message": "Unable to load orders. Check permissions."
+```
+
 Bad:
-python"search_fields": ["name", "modified", "owner"]  # System fields
-Rule: Use fields that users would naturally search by.
 
-8. Error Message Clarity
-Good:
-python"custom_messages": {
-    "error_message": "Unable to load orders. Check your permissions or contact support."
-}
-Bad:
-python"custom_messages": {
-    "error_message": "Error occurred"  # Too vague
-}
-Rule: Provide actionable error messages.
+```
+"error_message": "Error"
+```
 
-9. Testing Configurations
-Recommended Approach:
-python# Test endpoint
-GET_CONFIGS = {
-    "test_get_users": {
-        "doctype": "User",
-        "fields": ["name", "email"],
-        "roles": ["System Manager"],
-        # Start simple, add features incrementally
-    }
-}
+---
 
-# Then add features one by one:
-# 1. Add filters
-# 2. Add child table
-# 3. Add related data
-# 4. Test performance
+## 9. Testing Configurations
 
-10. Documentation
-Good:
-pythonGET_CONFIGS = {
-    "get_sales_orders": {
-        # PURPOSE: Fetch sales orders for sales dashboard
-        # USED BY: Sales Dashboard Widget
-        # PERFORMANCE: ~120ms for 20 records
-        # LAST UPDATED: 2024-01-15
-        
-        "doctype": "Sales Order",
-        "fields": ["name", "customer", "grand_total"],
-        "roles": ["Sales User"]
-    }
-}
+Start simple → add more:
 
-🔍 Debugging & Troubleshooting
-Enable Developer Mode
-python# In site_config.json
-{
-    "developer_mode": 1
+```python
+"doctype": "User",
+"fields": ["name", "email"],
+"roles": ["System Manager"]
+```
+
+Then:
+
++ Filters  
++ Child table  
++ Related parents  
+
+---
+
+## 10. Documentation Inside Config
+
+Example:
+
+```python
+"get_sales_orders": {
+    # PURPOSE: Used in Sales Dashboard
+    # PERFORMANCE: ~120ms for 20 rows
+    # UPDATED: 2024-01-15
 }
+```
+
+---
+
+# 🔍 Debugging & Troubleshooting
+
+## Enable Developer Mode
+
+```
+"developer_mode": 1
+```
+
 Benefits:
 
-Detailed error messages
-SQL query logging
-Configuration validation warnings
-Performance metrics
+- SQL logs  
+- Debug traceback  
+- Performance metrics  
 
+---
 
-Check Configuration
-bash# Get all configs
+## Inspect Config Info
+
+```
 GET /api/method/core.factory.api.get_data.get_config_info
-
-# Get specific config
 GET /api/method/core.factory.api.get_data.get_config_info?key=get_users
+```
 
-Test API
-bash# Test endpoint
+---
+
+## Test Engine Health
+
+```
 GET /api/method/core.factory.api.get_data.test_get_api
+```
+
 Response:
-json{
+
+```json
+{
     "status": "success",
     "data": {
         "stats": {
@@ -1287,86 +1417,133 @@ json{
             "with_related_parents": 5,
             "with_search": 12
         },
-        "available_configs": ["get_users", "get_orders", ...],
+        "available_configs": ["get_users", "get_orders"],
         "api_version": "1.0.0"
     }
 }
+```
 
-Common Issues
-Issue: "Configuration 'xyz' not found"
-Solution:
+---
 
-Check config file exists in app/config/
-Ensure file doesn't start with __
-Restart bench: bench restart
-Check logs for import errors
+# Common Issues
 
+### ❌ "Configuration 'xyz' not found"
+Fix:
 
-Issue: "Invalid fields for DocType"
-Solution:
+- Check config file path  
+- Ensure file name does not start with `__`  
+- Restart bench  
 
-Verify field exists in DocType
-Check for typos in field names
-Use frappe.get_meta("DocType").fields to list available fields
+---
 
+### ❌ "Invalid fields"
+Fix:
 
-Issue: "Access denied"
-Solution:
+```
+frappe.get_meta("Sales Order").fields
+```
 
-Verify user has required role
-Check department restrictions
-Test with System Manager role to isolate permission issue
+Check field names for typos.
 
+---
 
-Issue: Slow performance
-Solution:
+### ❌ "Access denied"
+Fix:
 
-Reduce number of fields
-Add specific filters
-Limit related parents to 2-3
-Use pagination aggressively
-Check database indexes on filter fields
+- Check user roles  
+- Check dept restrictions  
+- Test as System Manager  
 
+---
 
-📚 Quick Reference
-Query Parameters
-ParameterTypeDescriptionExamplekeystringRequired Configuration key?key=get_userspageintegerPage number (default: 1)?page=2limitintegerRecords per page (max: 100)?limit=50from_datedateStart date filter (ISO format)?from_date=2024-01-01to_datedateEnd date filter (ISO format)?to_date=2024-12-31querystringSearch query (comma-separated)?query=john,doe{field}anyOptional filter (exact match)?status=Open{field}__{op}anyOptional filter with operator?salary__gte=50000
+### ❌ Slow Performance
+Fix:
 
-Operators
-OperatorSyntaxDescriptionExampleEqualfield or field__eqExact match?status=OpenNot Equalfield__neNot equal to?status__ne=CancelledGreater Thanfield__gtGreater than?amount__gt=1000Greater or Equalfield__gteGreater or equal?amount__gte=1000Less Thanfield__ltLess than?age__lt=30Less or Equalfield__lteLess or equal?age__lte=30Infield__inIn list (comma-separated)?dept__in=Sales,HRNot Infield__ninNot in list?status__nin=Draft,CancelledLikefield__likeContains substring?email__like=@gmail.comStarts Withfield__startswithStarts with?name__startswith=JohnEnds Withfield__endswithEnds with?email__endswith=.comContainsfield__containsContains?desc__contains=urgentIs Nullfield__isnullIs NULL?end_date__isnull=trueNot Nullfield__notnullIs NOT NULL?email__notnull=trueIs Emptyfield__isemptyNULL or empty string?notes__isempty=trueNot Emptyfield__notemptyNot NULL and not empty?notes__notempty=trueDate Equalsfield__dateDate equals?created__date=2024-01-15Yearfield__yearYear equals?created__year=2024Monthfield__monthMonth equals?created__month=6Dayfield__dayDay equals?created__day=15Betweenfield__betweenRange (comma-separated)?salary__between=30000,50000
+- Reduce fields  
+- Reduce related parents  
+- Add indexes  
+- Use pagination  
 
-HTTP Status Codes
-CodeStatusMeaning200SuccessRequest successful400Bad RequestInvalid configuration key403ForbiddenPermission denied422Unprocessable EntityValidation error500Internal Server ErrorServer error
+---
 
-🎓 Learning Path
-Beginner
+# 📚 Quick Reference
 
-Create simple list API
-Add pagination
-Add search fields
-Add optional filters
+## Query Parameters
 
-Intermediate
-
-Add child table
-Add related parent
-Add static filters
-Customize messages
-
-Advanced
-
-Use operator suffixes
-Implement OR-static filters
-Use flat payload mode
-Optimize for performance
+| Parameter | Description |
+|-----------|-------------|
+| key | Config key |
+| page | Page number |
+| limit | Max 100 |
+| from_date | Date filter start |
+| to_date | Date filter end |
+| query | Search text |
+| field=value | Optional filter |
+| field__op=value | Operator |
 
 
-📞 Support
+## Operators
 
-GitHub Issues: Report bugs
-Discussions: Ask questions
-Documentation: Read docs
+- `=`  
+- `!=`  
+- `>`  
+- `<`  
+- `>=`  
+- `<=`  
+- `in`  
+- `nin`  
+- `like`  
+- `startswith`  
+- `endswith`  
+- `contains`  
+- `isnull`  
+- `notnull`  
+- `between`  
+- `year / month / day`  
 
+---
 
-📄 License
-This project is licensed under the MIT License.
+# Status Codes
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 400 | Error in config |
+| 403 | Permission denied |
+| 422 | Validation error |
+| 500 | Server error |
+
+---
+
+# 🎓 Learning Path
+
+### Beginner  
+- Simple list  
+- Pagination  
+- Search  
+- Optional filters  
+
+### Intermediate  
+- Child tables  
+- Related parents  
+- Static filters  
+- Custom messages  
+
+### Advanced  
+- Operators  
+- OR-static filters  
+- Flat payload  
+- Performance tuning  
+
+---
+
+# 📞 Support
+
+- GitHub Issues  
+- GitHub Discussions  
+- Documentation  
+
+---
+
+# 📄 License  
+**MIT License**
